@@ -5,7 +5,7 @@ version: "3.9"
 # ============================================================
 # Uso: docker compose up -d
 # Frontend: http://localhost:3000
-# Backend:  http://localhost:8000/docs
+# Backend:  http://localhost:8001/docs
 # PostgreSQL: localhost:5432
 # Redis:    localhost:6379
 # ============================================================
@@ -51,7 +51,7 @@ services:
     container_name: moldurize-api
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
       DATABASE_URL: postgresql://moldurize:moldurize_dev@db:5432/moldurize
       REDIS_URL: redis://redis:6379
@@ -65,7 +65,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
   # --- Next.js Frontend ---
   web:
@@ -77,7 +77,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: http://localhost:8001
     env_file:
       - ./apps/web/.env.local
     depends_on:

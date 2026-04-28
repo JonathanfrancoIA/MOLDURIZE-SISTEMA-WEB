@@ -31,21 +31,21 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <div className="p-8">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Histórico</h1>
-          <p className="text-white/50 text-sm mt-1">Todos os nestings realizados</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#171713]">Histórico</h1>
+          <p className="text-[#625f55] text-sm mt-1">Todos os nestings realizados</p>
         </div>
         <Link
           href="/nesting"
-          className="bg-yellow-400 text-black font-semibold text-sm px-5 py-2.5 rounded-xl hover:bg-yellow-300 transition-colors"
+          className="inline-flex items-center gap-2 bg-[#171713] text-[#f2c767] font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-[#2a281f] transition-colors"
         >
           + Novo Nesting
         </Link>
       </div>
 
-      <div className="bg-[#161616] border border-white/10 rounded-xl overflow-hidden">
+      <div className="bg-white border border-black/8 rounded-xl overflow-hidden shadow-[0_8px_24px_-16px_rgba(0,0,0,0.12)]">
         {loading ? (
           <div className="py-12 flex items-center justify-center">
             <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />

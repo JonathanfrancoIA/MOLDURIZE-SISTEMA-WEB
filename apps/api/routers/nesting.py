@@ -241,14 +241,11 @@ async def list_nestings_endpoint(
             {
                 "id": n.id,
                 "name": n.name,
-                "block_width": n.block_width,
-                "block_height": n.block_height,
+                "status": n.status.value if hasattr(n.status, "value") else n.status,
                 "total_blocks": n.total_blocks,
                 "waste_percent": n.waste_percent,
-                "pieces_per_block": n.pieces_per_block,
-                "total_pieces": len(n.parts_input) if n.parts_input else 0,
-                "status": n.status.value if hasattr(n.status, "value") else n.status,
                 "created_at": n.created_at.isoformat() if n.created_at else "",
+                "completed_at": n.completed_at.isoformat() if n.completed_at else None,
             }
             for n in nestings
         ]
