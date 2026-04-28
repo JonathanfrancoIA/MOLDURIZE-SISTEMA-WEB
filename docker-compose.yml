@@ -1,0 +1,87 @@
+version: "3.9"
+
+# ============================================================
+# MOLDURIZE WEB — Ambiente de Desenvolvimento Local
+# ============================================================
+# Uso: docker compose up -d
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:8000/docs
+# PostgreSQL: localhost:5432
+# Redis:    localhost:6379
+# ============================================================
+
+services:
+  # --- PostgreSQL ---
+  db:
+    image: postgres:16-alpine
+    container_name: moldurize-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: moldurize
+      POSTGRES_PASSWORD: moldurize_dev
+      POSTGRES_DB: moldurize
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moldurize"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Redis (Celery workers) ---
+  redis:
+    image: redis:7-alpine
+    container_name: moldurize-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- FastAPI Backend ---
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: moldurize-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://moldurize:moldurize_dev@db:5432/moldurize
+      REDIS_URL: redis://redis:6379
+      ENVIRONMENT: development
+    env_file:
+      - ./apps/api/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- Next.js Frontend ---
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: moldurize-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    env_file:
+      - ./apps/web/.env.local
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
