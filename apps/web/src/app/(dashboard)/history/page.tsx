@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
 import { FileText } from "lucide-react";
-import { api, type NestingSummary } from "@/lib/api";
+import { createBrowserApiClient, type NestingSummary } from "@/lib/api";
 
 const statusLabel: Record<NestingSummary["status"], string> = {
   pending: "Pendente",
@@ -20,16 +21,48 @@ const statusClass: Record<NestingSummary["status"], string> = {
 };
 
 export default function HistoryPage() {
+  if (hasClerkKey) {
+    return <HistoryPageWithClerk />;
+  }
+
+  return <HistoryContent />;
+}
+
+const hasClerkKey =
+  !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+  !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("SUBSTITUA");
+
+function HistoryPageWithClerk() {
+  const { getToken } = useAuth();
+  const getAuthToken = useCallback(async () => {
+    try {
+      return await getToken();
+    } catch {
+      return null;
+    }
+  }, [getToken]);
+
+  return <HistoryContent getAuthToken={getAuthToken} />;
+}
+
+function HistoryContent({
+  getAuthToken,
+}: {
+  getAuthToken?: () => string | null | Promise<string | null>;
+}) {
+  const api = useMemo(() => createBrowserApiClient(getAuthToken), [getAuthToken]);
   const [nestings, setNestings] = useState<NestingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     api.listNestings()
       .then(setNestings)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Erro ao carregar historico"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [api]);
 
   return (
     <div className="min-h-full bg-[#f5f5f0] p-6 text-[#171713]">

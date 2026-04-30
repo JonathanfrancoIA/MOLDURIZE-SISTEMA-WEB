@@ -1,9 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, ApiClientError, type Remnant, type RemnantStatus } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { ApiClientError, createBrowserApiClient, type Remnant, type RemnantStatus } from "@/lib/api";
 
 export default function RemnantsPage() {
+  if (hasClerkKey) {
+    return <RemnantsPageWithClerk />;
+  }
+
+  return <RemnantsContent />;
+}
+
+const hasClerkKey =
+  !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+  !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("SUBSTITUA");
+
+function RemnantsPageWithClerk() {
+  const { getToken } = useAuth();
+  const getAuthToken = useCallback(async () => {
+    try {
+      return await getToken();
+    } catch {
+      return null;
+    }
+  }, [getToken]);
+
+  return <RemnantsContent getAuthToken={getAuthToken} />;
+}
+
+function RemnantsContent({
+  getAuthToken,
+}: {
+  getAuthToken?: () => string | null | Promise<string | null>;
+}) {
+  const api = useMemo(() => createBrowserApiClient(getAuthToken), [getAuthToken]);
   const [remnants, setRemnants] = useState<Remnant[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [width, setWidth] = useState("");

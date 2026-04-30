@@ -115,7 +115,6 @@ function SettingsContent({
     setMessage(null);
     try {
       const res = await api.createPortal({
-        customer_id: customerId,
         return_url: window.location.href,
       });
       window.location.href = res.portal_url;

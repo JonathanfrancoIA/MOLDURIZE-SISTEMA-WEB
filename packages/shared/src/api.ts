@@ -195,7 +195,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: JSON.stringify(body),
       }),
 
-    createPortal: (body: { customer_id: string; return_url?: string }) =>
+    createPortal: (body: { return_url?: string }) =>
       request<{ portal_url: string }>("/api/v1/billing/portal", {
         method: "POST",
         body: JSON.stringify(body),
