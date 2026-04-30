@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, ApiClientError } from "@/lib/api";
+import { useAuth } from "@clerk/nextjs";
+import { ApiClientError, createBrowserApiClient } from "@/lib/api";
 
 const plans = [
   {
@@ -49,6 +50,51 @@ const plans = [
 ];
 
 export default function PricingPage() {
+  if (hasClerkKey) {
+    return <PricingPageWithClerk />;
+  }
+
+  return <PricingContent clerkId={null} authLoaded isSignedIn />;
+}
+
+function PricingPageWithClerk() {
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
+  const getAuthToken = useCallback(async () => {
+    try {
+      return await getToken();
+    } catch {
+      return null;
+    }
+  }, [getToken]);
+
+  return (
+    <PricingContent
+      clerkId={userId ?? null}
+      authLoaded={isLoaded}
+      isSignedIn={isSignedIn === true}
+      getAuthToken={getAuthToken}
+    />
+  );
+}
+
+const hasClerkKey =
+  !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+  !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("SUBSTITUA");
+
+type GetAuthToken = () => string | null | Promise<string | null>;
+
+function PricingContent({
+  clerkId,
+  authLoaded = true,
+  isSignedIn = true,
+  getAuthToken,
+}: {
+  clerkId: string | null;
+  authLoaded?: boolean;
+  isSignedIn?: boolean;
+  getAuthToken?: GetAuthToken;
+}) {
+  const checkoutApi = useMemo(() => createBrowserApiClient(getAuthToken), [getAuthToken]);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,12 +108,24 @@ export default function PricingPage() {
       return;
     }
 
+    if (hasClerkKey && !authLoaded) {
+      setError("Aguarde a autenticacao carregar antes de assinar.");
+      return;
+    }
+
+    if (hasClerkKey && (!isSignedIn || !clerkId)) {
+      window.location.href = `/sign-in?redirect_url=${encodeURIComponent("/pricing")}`;
+      return;
+    }
+
     setLoading(planId);
     setError(null);
 
     try {
-      const data = await api.createCheckout({
+      const data = await checkoutApi.createCheckout({
         plan: planId as "starter" | "pro" | "enterprise",
+        clerk_id: clerkId,
+        client_reference_id: clerkId,
         success_url: `${window.location.origin}/dashboard?checkout=success`,
         cancel_url: `${window.location.origin}/pricing?checkout=cancelled`,
       });

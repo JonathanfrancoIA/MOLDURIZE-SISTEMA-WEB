@@ -98,6 +98,30 @@ async def optimize_nesting(
         from engine import NestingEngine
         from shapely.geometry import box as shapely_box
 
+        db_user = None
+        if DB_ENABLED and db is not None:
+            from db import crud
+
+            db_user = crud.get_user_by_clerk_id(db, clerk_id)
+            if not db_user:
+                db_user = crud.get_or_create_user(
+                    db,
+                    clerk_id=clerk_id,
+                    email=f"{clerk_id}@mocked.email",
+                )
+
+            if not crud.can_user_nest(db, db_user):
+                plan = db_user.plan.value if hasattr(db_user.plan, "value") else str(db_user.plan)
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "message": "Limite mensal de nestings atingido.",
+                        "plan": plan,
+                        "nestings_this_month": db_user.nestings_this_month or 0,
+                        "nestings_limit": crud.get_plan_limit(db_user.plan),
+                    },
+                )
+
         engine = NestingEngine(
             block_w=request.block.width,
             block_h=request.block.height,
@@ -164,27 +188,20 @@ async def optimize_nesting(
         # Persist to database (when configured)
         nesting_id = str(uuid.uuid4())
         if DB_ENABLED and db is not None:
-            try:
-                from db import crud
-                # Locate or create user via clerk_id
-                user = crud.get_user_by_clerk_id(db, clerk_id)
-                if not user:
-                    user = crud.get_or_create_user(db, clerk_id=clerk_id, email=f"{clerk_id}@mocked.email")
-                
-                db_nesting = crud.create_nesting(
-                    db=db,
-                    user_id=user.id,
-                    block_width=request.block.width,
-                    block_height=request.block.height,
-                    kerf=request.block.kerf,
-                    parts_input=parts_input_serializable,
-                    name=request.name,
-                )
-                crud.update_nesting_result(db, db_nesting.id, result_dict)
-                nesting_id = db_nesting.id
-            except Exception as db_err:
-                # DB errors must not fail the nesting computation
-                print(f"[WARN] DB persist failed: {db_err}")
+            db_nesting = crud.create_nesting(
+                db=db,
+                user_id=db_user.id,
+                block_width=request.block.width,
+                block_height=request.block.height,
+                kerf=request.block.kerf,
+                parts_input=parts_input_serializable,
+                name=request.name,
+            )
+            updated_nesting = crud.update_nesting_result(db, db_nesting.id, result_dict)
+            if not updated_nesting:
+                raise RuntimeError("Nesting persisted but result update failed.")
+            crud.increment_nesting_count(db, db_user)
+            nesting_id = db_nesting.id
 
         return NestingResult(
             id=nesting_id,
@@ -200,6 +217,8 @@ async def optimize_nesting(
             total_pieces=total_pieces,
         )
 
+    except HTTPException:
+        raise
     except ImportError as e:
         raise HTTPException(
             status_code=500,
@@ -260,6 +279,7 @@ async def list_nestings_endpoint(
 @router.get("/nestings/{nesting_id}")
 async def get_nesting_endpoint(
     nesting_id: str,
+    clerk_id: str = Depends(get_current_user_clerk_id),
     db: Session = Depends(_get_db_optional),
 ):
     """Retorna os detalhes de um nesting específico."""
@@ -269,10 +289,15 @@ async def get_nesting_endpoint(
             detail="Banco de dados não configurado. Configure DATABASE_URL para habilitar histórico.",
         )
     try:
-        from db.schema import Nesting as NestingModel
-        n = db.query(NestingModel).filter(NestingModel.id == nesting_id).first()
+        from db import crud
+
+        user = crud.get_user_by_clerk_id(db, clerk_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Nesting não encontrado")
+        n = crud.get_nesting_for_user(db, nesting_id=nesting_id, user_id=user.id)
         if not n:
             raise HTTPException(status_code=404, detail="Nesting não encontrado")
+        total_pieces = sum(int(part.get("quantity", 1)) for part in (n.parts_input or []))
         return {
             "id": n.id,
             "name": n.name,
@@ -286,7 +311,7 @@ async def get_nesting_endpoint(
             "pieces_per_block": n.pieces_per_block,
             "parts_input": n.parts_input,
             "placed_parts": n.placed_parts,
-            "total_pieces": len(n.parts_input) if n.parts_input else 0,
+            "total_pieces": total_pieces,
             "status": n.status.value if hasattr(n.status, "value") else n.status,
             "created_at": n.created_at.isoformat() if n.created_at else "",
             "completed_at": n.completed_at.isoformat() if n.completed_at else None,

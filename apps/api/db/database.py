@@ -36,6 +36,4 @@ def get_db():
         db.close()
 
 
-def create_tables():
-    """Create all tables. Call on startup."""
-    Base.metadata.create_all(bind=engine)
+# create_tables() was removed; use Alembic for migrations (alembic upgrade head)

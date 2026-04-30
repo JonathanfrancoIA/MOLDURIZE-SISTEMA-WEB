@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,9 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-from routers import nesting, gcode, remnants, health, webhooks, billing
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
-load_dotenv()
+from routers import nesting, gcode, remnants, health, webhooks, billing, users
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Logging
@@ -49,11 +50,12 @@ async def lifespan(app: FastAPI):
     # Attempt to initialize database (non-fatal if unavailable in dev)
     if os.getenv("DATABASE_URL"):
         try:
-            from db.database import create_tables
-            create_tables()
-            logger.info("✓ Database tables ready")
+            from db.database import engine
+            with engine.connect() as conn:
+                pass # verify connection
+            logger.info("✓ Database connection ready")
         except Exception as e:
-            logger.warning(f"✗ Database init skipped: {e}")
+            logger.warning(f"✗ Database connection failed: {e}")
     else:
         logger.info("✓ Dev mode (no DATABASE_URL — running in-memory)")
 
@@ -146,6 +148,7 @@ app.include_router(gcode.router, prefix="/api/v1", tags=["gcode"])
 app.include_router(remnants.router, prefix="/api/v1", tags=["remnants"])
 app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"])
 app.include_router(billing.router, prefix="/api/v1", tags=["billing"])
+app.include_router(users.router, prefix="/api/v1", tags=["users"])
 
 
 @app.get("/", tags=["health"])

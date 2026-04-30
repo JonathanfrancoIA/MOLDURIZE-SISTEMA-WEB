@@ -20,6 +20,10 @@ def get_jwks_client():
     return _jwks_client
 
 def _dev_auth_enabled() -> bool:
+    """Dev bypass: active when MVP_DEV_MODE=true OR when CLERK_ISSUER_URL is not configured."""
+    # Explicit dev mode override — always beats everything (never enabled in production)
+    if os.getenv("MVP_DEV_MODE", "").lower() == "true":
+        return os.getenv("ENVIRONMENT", "development").lower() != "production"
     environment = os.getenv("ENVIRONMENT", "development").lower()
     issuer_url = os.getenv("CLERK_ISSUER_URL", "")
     return environment != "production" and (

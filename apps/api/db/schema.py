@@ -46,7 +46,7 @@ class User(Base):
     clerk_id = Column(String, unique=True, nullable=False, index=True)
     email = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=True)
-    plan = Column(Enum(PlanTier), default=PlanTier.FREE, nullable=False)
+    plan = Column(Enum(PlanTier, values_callable=lambda obj: [e.value for e in obj]), default=PlanTier.FREE, nullable=False)
     stripe_customer_id = Column(String, nullable=True)
     stripe_subscription_id = Column(String, nullable=True)
     nestings_this_month = Column(Integer, default=0)
@@ -72,7 +72,7 @@ class Nesting(Base):
     parts_input = Column(JSON, nullable=False)  # List of {width, height, quantity, label}
 
     # Results
-    status = Column(Enum(NestingStatus), default=NestingStatus.PENDING, nullable=False)
+    status = Column(Enum(NestingStatus, values_callable=lambda obj: [e.value for e in obj]), default=NestingStatus.PENDING, nullable=False)
     total_blocks = Column(Integer, nullable=True)
     waste_percent = Column(Float, nullable=True)
     largest_remnant_w = Column(Float, nullable=True)
@@ -98,7 +98,7 @@ class Remnant(Base):
     width = Column(Float, nullable=False)
     height = Column(Float, nullable=False)
     depth = Column(Float, default=100.0)
-    status = Column(Enum(RemnantStatus), default=RemnantStatus.DISPONIVEL, nullable=False)
+    status = Column(Enum(RemnantStatus, values_callable=lambda obj: [e.value for e in obj]), default=RemnantStatus.DISPONIVEL, nullable=False)
 
     # Optional: linked to the nesting that generated this remnant
     nesting_id = Column(String, ForeignKey("nestings.id", ondelete="SET NULL"), nullable=True)

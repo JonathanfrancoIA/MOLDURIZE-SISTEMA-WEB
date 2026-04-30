@@ -38,6 +38,7 @@ export interface NestingRequest {
 
 export interface NestingResponse {
   id: string;
+  name?: string | null;
   success: boolean;
   total_blocks: number;
   waste_percent: number;
@@ -49,6 +50,8 @@ export interface NestingResponse {
   block_height: number;
   total_pieces: number;
   nesting_id?: string;
+  kerf?: number | null;
+  parts_input?: PartInput[] | null;
 }
 
 export interface NestingSummary {
@@ -177,7 +180,8 @@ export interface PlansResponse {
 
 export interface CheckoutRequest {
   plan: "starter" | "pro" | "enterprise";
-  clerk_id?: string;
+  clerk_id?: string | null;
+  client_reference_id?: string | null;
   success_url?: string;
   cancel_url?: string;
 }
@@ -185,6 +189,43 @@ export interface CheckoutRequest {
 export interface CheckoutResponse {
   checkout_url: string;
   session_id: string;
+}
+
+// Account data returned by GET /api/v1/me
+export interface AccountUsage {
+  nestings_this_month?: number;
+  nestings_used?: number;
+  blocks_this_month?: number;
+  blocks_used?: number;
+  remnants_active?: number;
+}
+
+export interface AccountLimits {
+  nestings_limit: number;
+  blocks_limit: number;
+}
+
+export interface AccountBilling {
+  customer_id?: string | null;
+  stripe_customer_id?: string | null;
+  subscription_id?: string | null;
+  stripe_subscription_id?: string | null;
+  portal_enabled?: boolean;
+  portal_available?: boolean;
+  has_customer?: boolean;
+}
+
+export interface MeResponse {
+  id: string;
+  clerk_id: string;
+  email?: string | null;
+  name?: string | null;
+  plan: PlanTier;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  usage: AccountUsage;
+  limits: AccountLimits;
+  billing?: AccountBilling;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -17,6 +17,7 @@ import type {
   PlansResponse,
   CheckoutRequest,
   CheckoutResponse,
+  MeResponse,
   ApiError,
 } from "./types";
 
@@ -38,10 +39,21 @@ export interface ApiClientOptions {
   fetch?: typeof fetch;
 }
 
+type RuntimeProcess = {
+  env?: {
+    NEXT_PUBLIC_API_URL?: string;
+  };
+};
+
 export function createApiClient(options: ApiClientOptions = {}) {
+  const runtimeProcess =
+    typeof globalThis !== "undefined"
+      ? (globalThis as typeof globalThis & { process?: RuntimeProcess }).process
+      : undefined;
+
   const baseUrl =
     options.baseUrl ||
-    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
+    runtimeProcess?.env?.NEXT_PUBLIC_API_URL ||
     "http://localhost:8001";
 
   const fetchFn = options.fetch || fetch;
@@ -174,6 +186,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
     // ── Billing ───────────────────────────────────────────────────────────
     getPlans: () => request<PlansResponse>("/api/v1/billing/plans"),
+
+    getMe: () => request<MeResponse>("/api/v1/me"),
 
     createCheckout: (body: CheckoutRequest) =>
       request<CheckoutResponse>("/api/v1/billing/checkout", {

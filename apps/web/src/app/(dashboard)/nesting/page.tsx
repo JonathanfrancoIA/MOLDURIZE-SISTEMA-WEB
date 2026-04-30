@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import {
   Box,
@@ -41,6 +42,21 @@ const initialParts: EditablePart[] = [
 ];
 
 export default function NestingPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-24 flex flex-col items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#c9952f] mb-4" />
+        <p className="text-sm font-semibold text-[#625f55]">Carregando projeto...</p>
+      </div>
+    }>
+      <NestingContent />
+    </Suspense>
+  );
+}
+
+function NestingContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
   const { getToken } = useAuth();
   const api = useMemo(
     () =>
@@ -78,6 +94,7 @@ export default function NestingPage() {
   const [cornerRadius, setCornerRadius] = useState(0.5);
   const [gcodeStrategy, setGcodeStrategy] = useState<GCodeStrategy>("devfoam_auto");
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(!!id);
   const [gcodeLoading, setGcodeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,6 +124,32 @@ export default function NestingPage() {
       setActiveBlock(blockIndexes[0] ?? 0);
     }
   }, [activeBlock, blockIndexes]);
+
+  useEffect(() => {
+    if (!id) return;
+    setInitialLoad(true);
+    api.getNesting(id)
+      .then((res) => {
+        setProjectName(res.name || "Projeto Salvo");
+        setBlockWidth(res.block_width);
+        setBlockHeight(res.block_height);
+        if (res.kerf) setKerf(res.kerf);
+
+        if (res.parts_input && Array.isArray(res.parts_input)) {
+          setParts(res.parts_input.map((p, i) => ({
+            id: `p${i}_${Date.now()}`,
+            label: p.label || `Peça ${i+1}`,
+            width: p.width,
+            height: p.height,
+            quantity: p.quantity ?? 1,
+          })));
+        }
+
+        setResult(res);
+      })
+      .catch((err) => setError(formatError(err, "Erro ao carregar projeto.")))
+      .finally(() => setInitialLoad(false));
+  }, [id, api]);
 
   function updatePart(id: string, field: keyof EditablePart, value: string | number) {
     setParts((current) =>
@@ -333,11 +376,11 @@ export default function NestingPage() {
             <button
               type="button"
               onClick={runNesting}
-              disabled={loading}
+              disabled={loading || initialLoad}
               className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#171713] px-4 text-sm font-semibold text-[#f2c767] shadow-[0_16px_34px_-24px_rgba(0,0,0,0.65)] transition-all duration-200 hover:bg-[#2a281f] disabled:cursor-not-allowed disabled:opacity-60 active:-translate-y-[1px]"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" strokeWidth={1.8} />}
-              {loading ? "Calculando" : "Calcular nesting"}
+              {id ? (loading ? "Recalculando..." : "Nova Otimização") : (loading ? "Calculando..." : "Calcular nesting")}
             </button>
           </Panel>
         </aside>
@@ -370,7 +413,7 @@ export default function NestingPage() {
             </div>
 
             <div className="relative h-[540px] lg:h-[620px]">
-              {loading && <CanvasLoading />}
+              {(loading || initialLoad) && <CanvasLoading />}
               <NestingCanvas
                 blockWidth={blockWidth}
                 blockHeight={blockHeight}

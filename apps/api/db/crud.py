@@ -18,6 +18,38 @@ PLAN_LIMITS = {
     PlanTier.ENTERPRISE: -1, # unlimited
 }
 
+BLOCK_LIMITS = {
+    PlanTier.FREE: 1,
+    PlanTier.STARTER: 5,
+    PlanTier.PRO: -1,        # unlimited
+    PlanTier.ENTERPRISE: -1, # unlimited
+}
+
+
+def _normalize_plan(plan) -> PlanTier:
+    if isinstance(plan, PlanTier):
+        return plan
+    if isinstance(plan, str):
+        try:
+            return PlanTier(plan.lower())
+        except ValueError:
+            return PlanTier[plan.upper()]
+    return PlanTier.FREE
+
+
+def get_plan_limit(plan) -> int:
+    try:
+        return PLAN_LIMITS.get(_normalize_plan(plan), 0)
+    except (KeyError, ValueError):
+        return 0
+
+
+def get_block_limit(plan) -> int:
+    try:
+        return BLOCK_LIMITS.get(_normalize_plan(plan), 0)
+    except (KeyError, ValueError):
+        return 0
+
 
 # ---- Users ----
 def get_or_create_user(db: Session, clerk_id: str, email: str, name: Optional[str] = None) -> User:
@@ -91,15 +123,17 @@ def set_plan_by_stripe_customer(db: Session, customer_id: str, plan: PlanTier) -
 
 
 def can_user_nest(db: Session, user: User) -> bool:
-    limit = PLAN_LIMITS.get(user.plan, 0)
+    limit = get_plan_limit(user.plan)
     if limit == -1:
         return True
-    return user.nestings_this_month < limit
+    return (user.nestings_this_month or 0) < limit
 
 
-def increment_nesting_count(db: Session, user: User):
-    user.nestings_this_month += 1
+def increment_nesting_count(db: Session, user: User) -> User:
+    user.nestings_this_month = (user.nestings_this_month or 0) + 1
     db.commit()
+    db.refresh(user)
+    return user
 
 
 # ---- Nestings ----
@@ -152,6 +186,14 @@ def list_nestings(db: Session, user_id: str, limit: int = 20) -> List[Nesting]:
         .order_by(Nesting.created_at.desc())
         .limit(limit)
         .all()
+    )
+
+
+def get_nesting_for_user(db: Session, nesting_id: str, user_id: str) -> Optional[Nesting]:
+    return (
+        db.query(Nesting)
+        .filter(Nesting.id == nesting_id, Nesting.user_id == user_id)
+        .first()
     )
 
 

@@ -7,14 +7,26 @@ protected endpoints without real tokens.
 """
 import sys
 import os
+import tempfile
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("MVP_DEV_MODE", "true")
+_test_db_path = Path(tempfile.gettempdir()) / "moldurize_api_pytest.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{_test_db_path.as_posix()}"
+
 from main import app
 from dependencies.auth import get_current_user_clerk_id
+from routers import nesting, remnants, users
+
+nesting.DB_ENABLED = False
+remnants.DB_ENABLED = False
+users.DB_ENABLED = False
 
 
 async def _mock_current_user_clerk_id() -> str:
