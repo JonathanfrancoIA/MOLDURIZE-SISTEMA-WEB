@@ -55,8 +55,6 @@ function SettingsContent({
   const [account, setAccount] = useState<MeResponse | null>(null);
   const [loadingAccount, setLoadingAccount] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [loadingPortal, setLoadingPortal] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -98,45 +96,13 @@ function SettingsContent({
   const currentPlan = normalizePlan(account?.plan);
   const planInfo = currentPlan ? PLAN_LABELS[currentPlan] : null;
   const planDetails = currentPlan ? plans?.plans.find((p) => p.id === currentPlan) : null;
-  const customerId = getCustomerId(account);
-  const portalAvailable = getPortalAvailable(account);
-  const canOpenPortal = Boolean(customerId && portalAvailable);
-
-  async function openBillingPortal() {
-    if (!customerId || !portalAvailable) {
-      setMessage({
-        kind: "err",
-        text: "Portal de faturamento indisponivel para esta conta.",
-      });
-      return;
-    }
-
-    setLoadingPortal(true);
-    setMessage(null);
-    try {
-      const res = await api.createPortal({
-        return_url: window.location.href,
-      });
-      window.location.href = res.portal_url;
-    } catch (e) {
-      setMessage({
-        kind: "err",
-        text:
-          e instanceof Error
-            ? e.message
-            : "Erro ao abrir portal. Configure o Stripe primeiro.",
-      });
-    } finally {
-      setLoadingPortal(false);
-    }
-  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <header className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-[#171713]">Configuracoes</h1>
         <p className="text-[#625f55] text-sm mt-1">
-          Gerencie sua conta, plano e preferencias
+          Gerencie sua conta, uso e integracoes da API
         </p>
       </header>
 
@@ -149,18 +115,6 @@ function SettingsContent({
       {accountError && (
         <div className="mb-6 border border-amber-300 bg-amber-50 text-amber-800 rounded-xl p-3 text-sm">
           Nao foi possivel carregar os dados da conta: {accountError}
-        </div>
-      )}
-
-      {message && (
-        <div
-          className={`mb-6 border rounded-xl p-3 text-sm ${
-            message.kind === "ok"
-              ? "border-green-300 bg-green-50 text-green-700"
-              : "border-red-300 bg-red-50 text-red-700"
-          }`}
-        >
-          {message.text}
         </div>
       )}
 
@@ -188,10 +142,10 @@ function SettingsContent({
       </section>
 
       <section className="bg-white border border-black/8 rounded-xl p-6 mb-4 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.12)]">
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex flex-col gap-4 mb-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-xs font-semibold text-[#928b7c] uppercase tracking-wider">
-              Seu Plano
+              Plano e limites
             </h2>
             <div className="flex flex-wrap items-baseline gap-3 mt-2">
               {loadingAccount ? (
@@ -203,24 +157,17 @@ function SettingsContent({
               ) : (
                 <span className="text-2xl font-bold text-[#625f55]">Indisponivel</span>
               )}
-              {planDetails && (
-                <span className="text-sm text-[#928b7c]">
-                  R$ {planDetails.price}/{planDetails.period}
-                </span>
-              )}
+              {planDetails && <span className="text-sm text-[#928b7c]">Limites ativos nesta conta</span>}
             </div>
           </div>
-          <Link
-            href="/pricing"
-            className="text-xs bg-[#171713] text-[#f2c767] font-semibold px-4 py-2 rounded-lg hover:bg-[#2a281f] transition-colors"
-          >
-            {!currentPlan || currentPlan === "free" ? "Fazer Upgrade" : "Mudar Plano"}
-          </Link>
+          <div className="rounded-lg border border-[#c9952f]/25 bg-[#fff5da] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#8b651f]">
+            Operacao individual
+          </div>
         </div>
 
         {planDetails && (
           <div className="border-t border-black/8 pt-4">
-            <p className="text-xs text-[#928b7c] mb-2">Incluido neste plano:</p>
+            <p className="text-xs text-[#928b7c] mb-2">Capacidades habilitadas:</p>
             <ul className="space-y-1.5">
               {planDetails.features.map((feature) => (
                 <li key={feature} className="text-sm text-[#625f55] flex items-center gap-2">
@@ -233,25 +180,12 @@ function SettingsContent({
         )}
 
         <div className="mt-4 rounded-lg border border-black/8 bg-[#f5f5f0] p-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#928b7c]">
-                Portal Stripe
-              </p>
-              <p className="text-sm text-[#625f55]">
-                {canOpenPortal
-                  ? "Disponivel para gerenciar assinatura e faturas."
-                  : "Indisponivel ate existir um cliente Stripe vinculado."}
-              </p>
-            </div>
-            <button
-              onClick={openBillingPortal}
-              disabled={!canOpenPortal || loadingPortal}
-              className="text-sm border border-black/10 text-[#625f55] px-4 py-2.5 rounded-xl hover:border-black/20 hover:text-[#171713] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loadingPortal ? "Abrindo..." : "Gerenciar Faturamento"}
-            </button>
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#928b7c]">
+            Jornada operacional
+          </p>
+          <p className="mt-1 text-sm text-[#625f55]">
+            Pagamentos e portal comercial ficam fora do fluxo principal do app. Use esta tela para conferir conta, uso e integracoes.
+          </p>
         </div>
       </section>
 
@@ -389,29 +323,6 @@ function getUsageValue(account: MeResponse | null, kind: "nestings" | "blocks") 
     return usage.nestings_this_month ?? usage.nestings_used ?? null;
   }
   return usage.blocks_this_month ?? usage.blocks_used ?? null;
-}
-
-function getCustomerId(account: MeResponse | null) {
-  return (
-    account?.billing?.customer_id ??
-    account?.billing?.stripe_customer_id ??
-    account?.stripe_customer_id ??
-    null
-  );
-}
-
-function getPortalAvailable(account: MeResponse | null) {
-  if (!account) return false;
-  if (typeof account.billing?.portal_enabled === "boolean") {
-    return account.billing.portal_enabled;
-  }
-  if (typeof account.billing?.portal_available === "boolean") {
-    return account.billing.portal_available;
-  }
-  if (typeof account.billing?.has_customer === "boolean") {
-    return account.billing.has_customer;
-  }
-  return Boolean(getCustomerId(account));
 }
 
 function formatError(error: unknown) {

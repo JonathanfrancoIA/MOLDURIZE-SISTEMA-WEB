@@ -2,6 +2,17 @@
 
 Este guia define o caminho minimo para rodar o MOLDURIZE WEB com persistencia real.
 
+## MVP operacional de 2026-05-01
+
+Para a entrega operacional, login individual real exige:
+
+- `MVP_DEV_MODE=false` no backend.
+- `CLERK_ISSUER_URL` real do projeto Clerk.
+- `DATABASE_URL` apontando para Postgres real e acessivel.
+- Migrations aplicadas e `/health/db` retornando conexao ok.
+
+Stripe, Redis e Cloudflare R2 sao opcionais para este MVP operacional. Nao bloqueie o smoke manual por checkout, portal de billing, webhooks pagos, fila Celery, upload DXF ou arquivo permanente de G-Code.
+
 ## Portas padrao
 
 - Web: `http://localhost:3000`
@@ -21,7 +32,8 @@ Configure `apps/api/.env`:
 
 ```env
 ENVIRONMENT=development
-MVP_DEV_MODE=true
+MVP_DEV_MODE=false
+CLERK_ISSUER_URL=https://<your-clerk-instance>.clerk.accounts.dev
 DATABASE_URL=postgresql://moldurize:moldurize_dev@localhost:5432/moldurize
 ```
 
@@ -71,6 +83,21 @@ Depois rode:
 ```powershell
 make dev-web
 ```
+
+## Checklist A/B de login e isolamento
+
+Use dois usuarios reais do Clerk, Usuario A e Usuario B, com `MVP_DEV_MODE=false`.
+
+1. Abrir `http://localhost:3000/sign-in` e entrar como Usuario A.
+2. Confirmar que `/dashboard`, `/nesting`, `/history` e `/remnants` carregam sem modo anonimo/dev.
+3. Criar um nesting como Usuario A e confirmar que aparece no History.
+4. Criar um retalho como Usuario A e confirmar que aparece em Remnants.
+5. Sair do Usuario A.
+6. Entrar como Usuario B em uma sessao limpa ou navegador separado.
+7. Confirmar que Usuario B nao ve history, nesting salvo ou retalhos do Usuario A.
+8. Criar um nesting e um retalho como Usuario B.
+9. Voltar ao Usuario A e confirmar que os dados de Usuario B nao aparecem.
+10. Validar que `/api/v1/me` retorna o usuario logado correto em cada sessao.
 
 ## Smoke manual do MVP
 

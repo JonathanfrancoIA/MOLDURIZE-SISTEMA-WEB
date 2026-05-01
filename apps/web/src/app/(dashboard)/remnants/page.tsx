@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { AlertCircle, Loader2, PackageOpen, Plus, Trash2 } from "lucide-react";
 import { ApiClientError, createBrowserApiClient, type Remnant, type RemnantStatus } from "@/lib/api";
 
 export default function RemnantsPage() {
@@ -15,6 +16,16 @@ export default function RemnantsPage() {
 const hasClerkKey =
   !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
   !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("SUBSTITUA");
+
+const statusLabel: Record<RemnantStatus, string> = {
+  disponivel: "Disponivel",
+  descartado: "Descartado",
+};
+
+const statusClass: Record<RemnantStatus, string> = {
+  disponivel: "border-green-200 bg-green-50 text-green-700",
+  descartado: "border-red-200 bg-red-50 text-red-700",
+};
 
 function RemnantsPageWithClerk() {
   const { getToken } = useAuth();
@@ -45,27 +56,38 @@ function RemnantsContent({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<RemnantStatus | "all">("all");
 
-  async function loadRemnants() {
-    setFetching(true);
-    setError(null);
-    try {
-      const data = await api.listRemnants(filter === "all" ? undefined : filter);
-      setRemnants(data);
-    } catch (e) {
-      setError(
-        e instanceof ApiClientError
-          ? `Erro ao carregar retalhos (${e.status}): ${e.message}`
-          : "Erro ao carregar retalhos"
-      );
-    } finally {
-      setFetching(false);
-    }
-  }
-
   useEffect(() => {
+    let active = true;
+
+    async function loadRemnants() {
+      setFetching(true);
+      setError(null);
+      try {
+        const data = await api.listRemnants();
+        if (active) {
+          setRemnants(data);
+        }
+      } catch (e) {
+        if (active) {
+          setError(
+            e instanceof ApiClientError
+              ? `Erro ao carregar retalhos (${e.status}): ${e.message}`
+              : "Erro ao carregar retalhos"
+          );
+        }
+      } finally {
+        if (active) {
+          setFetching(false);
+        }
+      }
+    }
+
     loadRemnants();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+
+    return () => {
+      active = false;
+    };
+  }, [api]);
 
   async function addRemnant() {
     if (!width || !height) return;
@@ -114,124 +136,105 @@ function RemnantsContent({
     }
   }
 
+  const availableRemnants = remnants.filter((r) => r.status === "disponivel");
+  const discardedCount = remnants.filter((r) => r.status === "descartado").length;
+  const visibleRemnants =
+    filter === "all" ? remnants : remnants.filter((r) => r.status === filter);
   const totalArea =
-    remnants
-      .filter((r) => r.status === "disponivel")
-      .reduce((sum, r) => sum + r.width * r.height, 0) / 1e6; // m²
+    availableRemnants.reduce((sum, r) => sum + r.width * r.height, 0) / 1e6;
+  const emptyLabel =
+    filter === "all"
+      ? "Nenhum retalho cadastrado"
+      : `Nenhum retalho ${filter === "disponivel" ? "disponivel" : "descartado"}`;
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="min-h-full bg-[#f5f5f0] p-4 text-[#171713] sm:p-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Retalhos</h1>
-          <p className="text-white/50 text-sm mt-1">
-            Gerencie o estoque de retalhos de EPS
+          <h1 className="text-2xl font-bold tracking-tight text-[#171713]">Retalhos</h1>
+          <p className="mt-1 text-sm text-[#625f55]">
+            Controle o estoque reutilizavel de EPS para proximos jobs.
           </p>
         </div>
         <button
+          type="button"
           onClick={() => setShowForm(!showForm)}
-          className="bg-yellow-400 text-black font-semibold text-sm px-5 py-2.5 rounded-xl hover:bg-yellow-300 transition-colors"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#171713] px-4 text-sm font-semibold text-[#f2c767] shadow-[0_12px_28px_-18px_rgba(0,0,0,0.55)] transition-all duration-200 hover:bg-[#2a281f] active:-translate-y-[1px]"
         >
-          + Adicionar Retalho
+          <Plus className="h-4 w-4" strokeWidth={1.8} />
+          Adicionar retalho
         </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-[#161616] border border-white/10 rounded-xl p-4">
-          <p className="text-xs text-white/40 uppercase tracking-wider">
-            Disponíveis
-          </p>
-          <p className="text-2xl font-bold text-green-400 mt-1">
-            {remnants.filter((r) => r.status === "disponivel").length}
-          </p>
-        </div>
-        <div className="bg-[#161616] border border-white/10 rounded-xl p-4">
-          <p className="text-xs text-white/40 uppercase tracking-wider">
-            Descartados
-          </p>
-          <p className="text-2xl font-bold text-white/40 mt-1">
-            {remnants.filter((r) => r.status === "descartado").length}
-          </p>
-        </div>
-        <div className="bg-[#161616] border border-white/10 rounded-xl p-4">
-          <p className="text-xs text-white/40 uppercase tracking-wider">
-            Área Disponível
-          </p>
-          <p className="text-2xl font-bold text-yellow-400 mt-1">
-            {totalArea.toFixed(2)} m²
-          </p>
-        </div>
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCard label="Disponiveis" value={availableRemnants.length.toString()} tone="green" />
+        <MetricCard label="Descartados" value={discardedCount.toString()} />
+        <MetricCard label="Area disponivel" value={`${totalArea.toFixed(2)} m2`} tone="accent" />
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {(["all", "disponivel", "descartado"] as const).map((f) => (
           <button
             key={f}
+            type="button"
             onClick={() => setFilter(f)}
-            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            className={`h-8 rounded-md border px-3 text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
               filter === f
-                ? "bg-yellow-400/10 border-yellow-400/40 text-yellow-400"
-                : "border-white/10 text-white/50 hover:border-white/30"
+                ? "border-[#c9952f]/45 bg-[#fff5da] text-[#8b651f]"
+                : "border-black/10 bg-white/80 text-[#625f55] hover:border-[#c9952f]/40 hover:text-[#171713]"
             }`}
           >
-            {f === "all" ? "Todos" : f === "disponivel" ? "Disponíveis" : "Descartados"}
+            {f === "all" ? "Todos" : statusLabel[f]}
           </button>
         ))}
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-2 rounded-lg">
-          {error}
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
+          <span>{error}</span>
         </div>
       )}
 
       {showForm && (
-        <div className="bg-[#161616] border border-white/10 rounded-xl p-5 mb-6">
-          <h3 className="text-sm font-semibold mb-4">Novo Retalho</h3>
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Largura (mm)</label>
-              <input
-                type="number"
-                value={width}
-                onChange={(e) => setWidth(e.target.value)}
-                placeholder="ex: 1500"
-                className="w-full bg-[#0f0f0f] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Altura (mm)</label>
-              <input
-                type="number"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-                placeholder="ex: 600"
-                className="w-full bg-[#0f0f0f] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400/50"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Profundidade (mm)</label>
-              <input
-                type="number"
-                value={depth}
-                onChange={(e) => setDepth(e.target.value)}
-                className="w-full bg-[#0f0f0f] border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-400/50"
-              />
-            </div>
+        <div className="mb-6 rounded-xl border border-black/10 bg-white p-5 shadow-[0_8px_24px_-16px_rgba(0,0,0,0.12)]">
+          <h2 className="mb-4 text-sm font-bold text-[#171713]">Novo retalho</h2>
+          <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <TextInput
+              label="Largura"
+              suffix="mm"
+              value={width}
+              onChange={setWidth}
+              placeholder="ex: 1500"
+            />
+            <TextInput
+              label="Altura"
+              suffix="mm"
+              value={height}
+              onChange={setHeight}
+              placeholder="ex: 600"
+            />
+            <TextInput
+              label="Profundidade"
+              suffix="mm"
+              value={depth}
+              onChange={setDepth}
+            />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
+              type="button"
               onClick={addRemnant}
               disabled={loading || !width || !height}
-              className="bg-yellow-400 text-black font-semibold text-sm px-4 py-2 rounded-lg hover:bg-yellow-300 disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#171713] px-4 text-sm font-semibold text-[#f2c767] transition-all duration-200 hover:bg-[#2a281f] disabled:cursor-not-allowed disabled:opacity-50 active:-translate-y-[1px]"
             >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {loading ? "Salvando..." : "Salvar"}
             </button>
             <button
+              type="button"
               onClick={() => setShowForm(false)}
-              className="border border-white/20 text-white text-sm px-4 py-2 rounded-lg hover:border-white/40"
+              className="h-10 rounded-lg border border-black/10 bg-white px-4 text-sm font-semibold text-[#625f55] transition-colors hover:border-black/20 hover:text-[#171713]"
             >
               Cancelar
             </button>
@@ -239,83 +242,177 @@ function RemnantsContent({
         </div>
       )}
 
-      <div className="bg-[#161616] border border-white/10 rounded-xl overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-black/10 bg-white shadow-[0_8px_24px_-16px_rgba(0,0,0,0.12)]">
         {fetching ? (
-          <div className="py-16 text-center">
-            <div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-white/40 text-sm mt-3">Carregando...</p>
+          <div className="flex flex-col items-center justify-center px-6 py-16">
+            <Loader2 className="mb-3 h-6 w-6 animate-spin text-[#c9952f]" />
+            <p className="text-sm font-semibold text-[#625f55]">Carregando retalhos...</p>
           </div>
-        ) : remnants.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="text-4xl mb-3">📦</div>
-            <p className="text-white/50 text-sm">
-              {filter === "all"
-                ? "Nenhum retalho cadastrado"
-                : `Nenhum retalho ${filter === "disponivel" ? "disponível" : "descartado"}`}
-            </p>
-            <p className="text-white/30 text-xs mt-1">
-              Adicione retalhos de cortes anteriores para reutilizá-los
+        ) : visibleRemnants.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-lg border border-black/10 bg-[#f5f5f0] text-[#928b7c]">
+              <PackageOpen className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <p className="text-sm font-semibold text-[#171713]">{emptyLabel}</p>
+            <p className="mt-1 text-xs text-[#625f55]">
+              Cadastre sobras de cortes anteriores para reutilizar no planejamento.
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-white/40 text-xs">
-                <th className="text-left px-6 py-3 font-medium">ID</th>
-                <th className="text-left px-4 py-3 font-medium">Largura</th>
-                <th className="text-left px-4 py-3 font-medium">Altura</th>
-                <th className="text-left px-4 py-3 font-medium">Profundidade</th>
-                <th className="text-left px-4 py-3 font-medium">Área</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-left px-4 py-3 font-medium">Criado</th>
-                <th className="text-right px-4 py-3 font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {remnants.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-b border-white/5 hover:bg-white/[0.02]"
-                >
-                  <td className="px-6 py-3 text-white/40 font-mono text-xs">
-                    {r.id.slice(0, 8)}…
-                  </td>
-                  <td className="px-4 py-3">{r.width} mm</td>
-                  <td className="px-4 py-3">{r.height} mm</td>
-                  <td className="px-4 py-3">{r.depth} mm</td>
-                  <td className="px-4 py-3 text-white/60">
-                    {((r.width * r.height) / 1e6).toFixed(3)} m²
-                  </td>
-                  <td className="px-4 py-3">
+          <>
+            <div className="divide-y divide-black/5 md:hidden">
+              {visibleRemnants.map((r) => (
+                <article key={r.id} className="p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-semibold text-[#8b651f]">
+                        {r.id.slice(0, 8)}...
+                      </p>
+                      <p className="mt-1 text-lg font-bold text-[#171713]">
+                        {r.width} x {r.height} mm
+                      </p>
+                      <p className="text-xs text-[#625f55]">
+                        Prof. {r.depth} mm | {((r.width * r.height) / 1e6).toFixed(3)} m2
+                      </p>
+                    </div>
                     <button
-                      onClick={() => toggleStatus(r)}
-                      className={`text-xs px-2 py-0.5 rounded-full transition-opacity hover:opacity-70 ${
-                        r.status === "disponivel"
-                          ? "bg-green-500/20 text-green-400"
-                          : "bg-red-500/20 text-red-400"
-                      }`}
-                    >
-                      {r.status}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-white/40 text-xs">
-                    {new Date(r.created_at).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
+                      type="button"
                       onClick={() => deleteRemnant(r.id)}
-                      className="text-white/30 hover:text-red-400 text-xs transition-colors"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-black/10 text-[#928b7c] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
                       title="Remover"
                     >
-                      ✕
+                      <Trash2 className="h-4 w-4" strokeWidth={1.8} />
                     </button>
-                  </td>
-                </tr>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleStatus(r)}
+                      className={`inline-flex rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase transition-opacity hover:opacity-75 ${statusClass[r.status]}`}
+                    >
+                      {statusLabel[r.status]}
+                    </button>
+                    <span className="text-xs text-[#928b7c]">
+                      {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                    </span>
+                  </div>
+                </article>
               ))}
-            </tbody>
-          </table>
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[920px] text-sm">
+                <thead className="bg-[#fafaf7]">
+                  <tr className="border-b border-black/10 text-xs text-[#625f55]">
+                    <th className="px-6 py-3 text-left font-semibold">ID</th>
+                    <th className="px-4 py-3 text-left font-semibold">Largura</th>
+                    <th className="px-4 py-3 text-left font-semibold">Altura</th>
+                    <th className="px-4 py-3 text-left font-semibold">Profundidade</th>
+                    <th className="px-4 py-3 text-left font-semibold">Area</th>
+                    <th className="px-4 py-3 text-left font-semibold">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold">Criado em</th>
+                    <th className="px-4 py-3 text-right font-semibold" aria-label="Acoes" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRemnants.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-b border-black/5 last:border-b-0 hover:bg-[#fafaf7]"
+                    >
+                      <td className="px-6 py-3 font-mono text-xs text-[#928b7c]">
+                        {r.id.slice(0, 8)}...
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-[#171713]">{r.width} mm</td>
+                      <td className="px-4 py-3 text-[#625f55]">{r.height} mm</td>
+                      <td className="px-4 py-3 text-[#625f55]">{r.depth} mm</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[#625f55]">
+                        {((r.width * r.height) / 1e6).toFixed(3)} m2
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleStatus(r)}
+                          className={`inline-flex rounded-md border px-2 py-1 text-[10px] font-bold uppercase transition-opacity hover:opacity-75 ${statusClass[r.status]}`}
+                        >
+                          {statusLabel[r.status]}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[#625f55]">
+                        {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => deleteRemnant(r.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-black/10 text-[#928b7c] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                          title="Remover"
+                        >
+                          <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "accent" | "green";
+}) {
+  const valueClass =
+    tone === "accent"
+      ? "text-[#8b651f]"
+      : tone === "green"
+        ? "text-green-700"
+        : "text-[#171713]";
+
+  return (
+    <div className="rounded-xl border border-black/10 bg-white p-4 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.18)]">
+      <p className="text-xs font-semibold uppercase tracking-widest text-[#928b7c]">{label}</p>
+      <p className={`mt-1 font-mono text-2xl font-bold ${valueClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function TextInput({
+  label,
+  suffix,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  suffix: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold text-[#625f55]">{label}</span>
+      <div className="flex h-10 items-center rounded-md border border-black/10 bg-white transition-colors focus-within:border-[#c9952f]/70">
+        <input
+          type="number"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 bg-transparent px-3 text-sm text-[#171713] outline-none placeholder:text-[#aaa493]"
+        />
+        <span className="shrink-0 pr-3 text-[10px] font-semibold text-[#928b7c]">{suffix}</span>
+      </div>
+    </label>
   );
 }

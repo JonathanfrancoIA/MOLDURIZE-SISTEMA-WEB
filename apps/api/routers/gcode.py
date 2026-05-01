@@ -2,13 +2,14 @@ import os
 import sys
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from gcode_generator import MoldurizeGCodeGenerator
+from dependencies.auth import get_current_user_clerk_id
 
 router = APIRouter()
 
@@ -85,7 +86,10 @@ def _build_gcode(request: GCodeRequest) -> str:
 
 
 @router.post("/gcode", response_class=PlainTextResponse)
-async def get_gcode(request: GCodeRequest):
+async def get_gcode(
+    request: GCodeRequest,
+    clerk_id: str = Depends(get_current_user_clerk_id),
+):
     """Gera G-Code CNC para fio quente a partir das pecas posicionadas."""
     try:
         return _build_gcode(request)
@@ -94,7 +98,10 @@ async def get_gcode(request: GCodeRequest):
 
 
 @router.post("/gcode/download")
-async def download_gcode(request: GCodeRequest):
+async def download_gcode(
+    request: GCodeRequest,
+    clerk_id: str = Depends(get_current_user_clerk_id),
+):
     """Retorna G-Code como arquivo .nc para download."""
     try:
         content = _build_gcode(request)

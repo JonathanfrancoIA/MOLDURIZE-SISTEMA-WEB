@@ -66,8 +66,10 @@ async def get_current_user_clerk_id(
             
         return clerk_id
         
+    except HTTPException:
+        raise
     except jwt.PyJWKClientError as e:
-         raise HTTPException(status_code=401, detail=f"Erro ao obter Chaves Públicas do Clerk: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Erro ao obter Chaves Públicas do Clerk: {str(e)}")
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token JWT expirado.")
     except jwt.InvalidTokenError as e:
