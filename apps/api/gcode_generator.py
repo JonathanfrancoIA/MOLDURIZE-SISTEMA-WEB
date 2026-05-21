@@ -381,6 +381,34 @@ class MoldurizeGCodeGenerator:
         points = self._rounded_rectangle_points(x, y, width, height)
         self.cut_contour(points, clockwise=None if self.corner_radius > 0 else False)
 
+    def cut_smart_piece(self, x: float, y: float, width: float, height: float) -> None:
+        """Corta 3 lados da peça baseando-se na posição atual para evitar backtracking.
+
+        Imita um caminho Euleriano contínuo: entra por um lado, percorre topo e
+        base, e para na extremidade oposta — pronto para a próxima peça sem
+        que o fio quente atravesse o EPS já cortado.
+        """
+        if self.current_x <= (x + width / 2.0):
+            # Fio vem da esquerda: entra pela esquerda, sai pela direita
+            pts: list[Point] = [
+                (x, y),
+                (x, y + height),
+                (x + width, y + height),
+                (x + width, y),
+            ]
+        else:
+            # Fio vem da direita: entra pela direita, sai pela esquerda
+            pts = [
+                (x + width, y),
+                (x + width, y + height),
+                (x, y + height),
+                (x, y),
+            ]
+
+        # closed=False evita que o fio retorne ao ponto de origem derretendo o EPS duas vezes
+        self.cut_contour(pts, closed=False, clockwise=None)
+
+
     def _cell_radius(self, cell: _GridCell) -> float:
         return min(self.corner_radius, cell.width / 2.0, cell.height / 2.0)
 
@@ -820,9 +848,6 @@ class MoldurizeGCodeGenerator:
         self.park_x = origin_x + self.clearance
         self.park_y = origin_y
 
-        if self.compact_output:
-            self.linear_move(self.park_x, self.park_y)
-
         for block_index in blocks:
             block_pieces = [p for p in piece_list if int(getattr(p, "block_index", 0)) == block_index]
             if strategy_mode == "serpentine":
@@ -861,7 +886,7 @@ class MoldurizeGCodeGenerator:
 
                 self._comment(f"; Peca {counter}: {label}")
                 self._comment(f"; Dimensoes: {width:.1f} x {height:.1f} mm")
-                self.cut_rectangle(x, y, width, height)
+                self.cut_smart_piece(x, y, width, height)
 
         self._comment(f"; === Total: {counter} pecas cortadas ===")
 
