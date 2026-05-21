@@ -30,4 +30,34 @@ export const api = createBrowserApiClient(async () => {
 });
 
 export { ApiClientError, createApiClient } from "@moldurize/shared";
+export type {
+  ApiClientError as ApiClientErrorType,
+  MeResponse,
+  NestingSummary,
+  Remnant,
+  NestingRequest,
+  NestingResponse,
+  GCodeRequest,
+  GCodeResponse,
+  RemnantCreate,
+  RemnantUpdate,
+  PartInput,
+  BlockConfig,
+  PlacedPart,
+  GCodePiece,
+  GCodeConfig,
+  MachineProfile,
+  NestingStatus,
+  RemnantStatus,
+  PlanTier,
+  Plan,
+  PlansResponse,
+  CheckoutRequest,
+  CheckoutResponse,
+  AccountUsage,
+  AccountLimits,
+  AccountBilling,
+  ApiError,
+  ApiValidationError,
+} from "@moldurize/shared";
 export type * from "@moldurize/shared";

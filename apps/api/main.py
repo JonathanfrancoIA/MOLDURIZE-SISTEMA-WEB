@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
-from routers import nesting, gcode, remnants, health, webhooks, billing, users
+from routers import nesting, gcode, remnants, health, webhooks, billing, users, upload
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Logging
@@ -149,6 +149,7 @@ app.include_router(remnants.router, prefix="/api/v1", tags=["remnants"])
 app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"])
 app.include_router(billing.router, prefix="/api/v1", tags=["billing"])
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
+app.include_router(upload.router, prefix="/api/v1", tags=["upload"])
 
 
 @app.get("/", tags=["health"])

@@ -301,6 +301,15 @@ class MoldurizeGCodeGenerator:
                 self.linear_move(start_x, start_y, comment="Lead-in")
             else:
                 self.rapid_move(start_x, start_y)
+        elif self.compact_output and not self._same_position(start_x, start_y):
+            # Compact / devFoam mode: transit with axis-aligned moves so the
+            # wire never cuts diagonally through uncut EPS foam.
+            # Strategy: move vertically first (along the current column's already-
+            # cut left edge), then horizontally into the new row.
+            if not math.isclose(self.current_y, start_y, abs_tol=0.0001):
+                self.linear_move(self.current_x, start_y)
+            if not math.isclose(self.current_x, start_x, abs_tol=0.0001):
+                self.linear_move(start_x, start_y)
         else:
             self.rapid_move(start_x, start_y)
 
@@ -447,13 +456,15 @@ class MoldurizeGCodeGenerator:
             return None
 
         first_row = rows[0]
-        expected_height = first_row[0].height
 
         for row in rows:
             base_row = row[0]
             if any(abs(cell.y - base_row.y) > geometry_tolerance for cell in row):
                 return None
-            if any(abs(cell.height - expected_height) > geometry_tolerance for cell in row):
+            # Cells within the same row must share the same height; rows may
+            # differ in height from each other (devFoam handles adjacent rows of
+            # varying height via vertical transitions along the left-edge corridor).
+            if any(abs(cell.height - base_row.height) > geometry_tolerance for cell in row):
                 return None
             for left_cell, right_cell in zip(row, row[1:]):
                 if right_cell.x < left_cell.right - geometry_tolerance:
@@ -658,6 +669,16 @@ class MoldurizeGCodeGenerator:
 
     def _cut_banded_grid(self, rows: Sequence[Sequence[_GridCell]]) -> bool:
         if len(rows) < 2 or any(len(row) != 2 for row in rows):
+            return False
+
+        # Banded strategy uses cross-row inner paths that assume uniform cell
+        # height.  Delegate to _cut_shared_grid when heights vary between rows.
+        first_height = rows[0][0].height
+        if any(
+            abs(cell.height - first_height) > 1.0
+            for row in rows
+            for cell in row
+        ):
             return False
 
         first_cell = rows[0][0]

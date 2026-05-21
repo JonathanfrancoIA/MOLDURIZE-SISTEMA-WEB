@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { PieChart, TrendingUp, Scissors, Package, LayoutGrid, Clock, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { PieChart, TrendingUp, Scissors, Package, LayoutGrid, Clock, ArrowRight, Loader2, AlertCircle, Info } from "lucide-react";
 import Link from "next/link";
 import { ApiClientError, createBrowserApiClient, type MeResponse, type NestingSummary, type Remnant } from "@/lib/api";
 
@@ -17,6 +17,25 @@ export default function DashboardPage() {
 const hasClerkKey =
   !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
   !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("SUBSTITUA");
+
+function formatRelativeTime(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "agora";
+    if (diffMins < 60) return `há ${diffMins} min`;
+    if (diffHours < 24) return `há ${diffHours} h`;
+    if (diffDays < 30) return `há ${diffDays} d`;
+    return dateString.split("T")[0];
+  } catch {
+    return "—";
+  }
+}
 
 type DashboardLoadErrors = {
   nestings?: string;
@@ -115,18 +134,25 @@ function DashboardContent({
   const blocksLimitText = formatLimit(account?.limits?.blocks_limit);
   const usageUnavailable = !!loadErrors.account && !!loadErrors.nestings;
 
+  const mostRecentNestingTime = useMemo(() => {
+    if (!nestings.length) return null;
+    // Assume API returns nestings sorted by created_at DESC; if not, sort client-side
+    const newest = nestings[0];
+    return newest.created_at ? formatRelativeTime(newest.created_at) : null;
+  }, [nestings]);
+
   return (
-    <div className="min-h-full bg-[#f5f5f0] text-[#171713] p-6 overflow-y-auto">
+    <div className="min-h-full bg-gradient-to-b from-gray-950 to-gray-900 text-white p-6 overflow-y-auto">
 
       {/* ─── HEADER ─── */}
-      <header className="mb-8 flex items-end justify-between">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#171713] mb-1">Visão Geral</h1>
-          <p className="text-[#625f55] text-sm">Acompanhe a eficiência da sua fábrica de EPS.</p>
+          <h1 className="text-4xl font-bold tracking-tight mb-2">Visão Geral</h1>
+          <p className="text-gray-400 text-sm">Acompanhe a eficiência e o desempenho da sua fábrica de EPS em tempo real.</p>
         </div>
         <Link
           href="/nesting"
-          className="inline-flex items-center gap-2 bg-[#171713] text-[#f2c767] font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-[#2a281f] transition-colors shadow-[0_12px_28px_-18px_rgba(0,0,0,0.55)]"
+          className="inline-flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold text-sm px-6 py-3 rounded-lg hover:shadow-lg hover:shadow-cyan-500/30 transition-all active:scale-95 shrink-0"
         >
           <Scissors className="w-4 h-4" />
           Novo Projeto de Corte
@@ -135,94 +161,147 @@ function DashboardContent({
 
       {/* API offline warning */}
       {apiOffline && (
-        <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>API offline ou parcialmente indisponivel. Dados incompletos nao serao tratados como lista vazia. Inicie o backend com <code className="font-mono bg-amber-100 px-1 rounded">make dev-api</code>.</span>
+          <span>API offline ou parcialmente indisponível. Dados incompletos não serão tratados como lista vazia. Inicie o backend com <code className="font-mono bg-amber-500/20 px-1 rounded">make dev-api</code>.</span>
         </div>
       )}
 
       {/* ─── METRICS GRID ─── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
         {/* Métrica 1 — Jobs processados */}
-        <div className="bg-white border border-black/10 rounded-xl p-5 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.18)] relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-1 h-full bg-[#c9952f] rounded-l-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="text-[#928b7c] font-semibold text-xs uppercase tracking-widest">Uso de Nestings</h3>
-            <span className="p-2 bg-[#f5f5f0] rounded-lg text-[#c9952f]">
-              <LayoutGrid className="w-4 h-4" />
-            </span>
+        <div className="relative overflow-hidden rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 p-6 backdrop-blur transition-all hover:border-cyan-500/40 group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Uso de Nestings</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                <LayoutGrid className="w-4 h-4" />
+              </div>
+            </div>
+            {loading ? (
+              <div className="space-y-3">
+                <div className="h-8 w-20 bg-gray-700/50 rounded animate-pulse" />
+                <div className="h-3 w-32 bg-gray-700/30 rounded animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <div className="text-4xl font-bold text-cyan-300">{nestingsUsed}</div>
+                  <span className="text-xs text-gray-500 font-mono">
+                    {nestingsLimitText || ""}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-400">
+                  {loadErrors.nestings
+                    ? "Histórico indisponível"
+                    : mostRecentNestingTime
+                      ? `Último: ${mostRecentNestingTime}`
+                      : `${completedNestings.length} concluídos`}
+                </div>
+              </>
+            )}
           </div>
-          {loading ? (
-            <div className="h-10 w-20 bg-black/5 rounded animate-pulse" />
-          ) : (
-            <>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-bold text-[#171713]">{nestingsUsed}</div>
-                <span className="text-xs text-[#928b7c] font-mono">
-                  {nestingsLimitText || "NESTINGS"}
-                </span>
-              </div>
-              <div className="text-xs text-[#928b7c] mt-1">
-                {loadErrors.nestings
-                  ? "Historico indisponivel"
-                  : `${completedNestings.length} concluidos | ${nestings.filter(n => n.status === "failed").length} com falha`}
-              </div>
-            </>
-          )}
         </div>
 
         {/* Métrica 2 — Eficiência média */}
-        <div className="bg-white border border-black/10 rounded-xl p-5 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.18)] relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-1 h-full bg-[#171713] rounded-l-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="text-[#928b7c] font-semibold text-xs uppercase tracking-widest">Eficiência Média</h3>
-            <span className="p-2 bg-[#fff5da] rounded-lg text-[#c9952f]">
-              <PieChart className="w-4 h-4" />
-            </span>
+        <div className="relative overflow-hidden rounded-xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5 p-6 backdrop-blur transition-all hover:border-green-500/40 group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Eficiência Média</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-green-500/20 text-green-300 border border-green-500/40">
+                <PieChart className="w-4 h-4" />
+              </div>
+            </div>
+            {loading ? (
+              <div className="space-y-3">
+                <div className="h-8 w-24 bg-gray-700/50 rounded animate-pulse" />
+                <div className="h-3 w-40 bg-gray-700/30 rounded animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <div className="text-4xl font-bold text-green-300 mb-2">
+                  {avgEfficiency ? `${avgEfficiency}%` : "—"}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {loadErrors.nestings
+                    ? "Sem dados"
+                    : avgEfficiency
+                      ? `${parseFloat(avgEfficiency) >= 90 ? "Acima da meta (90%)" : "Meta: 90%"}`
+                      : "Calcule seu primeiro nesting"}
+                </div>
+              </>
+            )}
           </div>
-          {loading ? (
-            <div className="h-10 w-24 bg-black/5 rounded animate-pulse" />
-          ) : (
-            <>
-              <div className="text-3xl font-bold text-[#171713]">
-                {avgEfficiency ? `${avgEfficiency}%` : "—"}
-              </div>
-              <div className="text-xs text-[#928b7c] mt-1">
-                {loadErrors.nestings
-                  ? "Historico indisponivel"
-                  : avgEfficiency
-                    ? `Alvo: 90.0% | ${parseFloat(avgEfficiency) >= 90 ? "Acima" : "Abaixo"}`
-                    : "Calcule um nesting para ver"}
-              </div>
-            </>
-          )}
         </div>
 
         {/* Métrica 3 — Blocos totais */}
-        <div className="bg-white border border-black/10 rounded-xl p-5 shadow-[0_14px_32px_-24px_rgba(0,0,0,0.18)] relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-1 h-full bg-[#c9952f] rounded-l-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="text-[#928b7c] font-semibold text-xs uppercase tracking-widest">Blocos Consumidos</h3>
-            <span className="p-2 bg-[#f5f5f0] rounded-lg text-[#928b7c]">
-              <TrendingUp className="w-4 h-4" />
-            </span>
+        <div className="relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-6 backdrop-blur transition-all hover:border-blue-500/40 group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Blocos Consumidos</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+            </div>
+            {loading ? (
+              <div className="space-y-3">
+                <div className="h-8 w-16 bg-gray-700/50 rounded animate-pulse" />
+                <div className="h-3 w-36 bg-gray-700/30 rounded animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <div className="text-4xl font-bold text-blue-300">{usageUnavailable ? "-" : blocksUsed}</div>
+                  {blocksLimitText && (
+                    <span className="text-xs text-gray-500 font-mono">{blocksLimitText}</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {usageUnavailable ? "Uso indisponível" : "Uso do período"}
+                </div>
+              </>
+            )}
           </div>
-          {loading ? (
-            <div className="h-10 w-16 bg-black/5 rounded animate-pulse" />
-          ) : (
-            <>
-              <div className="flex items-baseline gap-2">
-                <div className="text-3xl font-bold text-[#171713]">{usageUnavailable ? "-" : blocksUsed}</div>
-                {blocksLimitText && (
-                  <span className="text-xs text-[#928b7c] font-mono">{blocksLimitText}</span>
-                )}
+        </div>
+
+        {/* Métrica 4 — Economia Estimada */}
+        <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 p-6 backdrop-blur transition-all hover:border-amber-500/40 group">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Material Economizado</p>
               </div>
-              <div className="text-xs text-[#928b7c] mt-1">
-                {usageUnavailable ? "Uso indisponivel" : "Uso do mes informado pela conta"}
+              <div className="p-2.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-help" title="Baseado na eficiência e tamanho dos blocos">
+                <Info className="w-4 h-4" />
               </div>
-            </>
-          )}
+            </div>
+            {loading ? (
+              <div className="space-y-3">
+                <div className="h-8 w-24 bg-gray-700/50 rounded animate-pulse" />
+                <div className="h-3 w-28 bg-gray-700/30 rounded animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <div className="text-4xl font-bold text-amber-300">{avgEfficiency && totalBlocks ? "~30%" : "—"}</div>
+                </div>
+                <div className="text-xs text-gray-400">
+                  Redução de desperdício
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

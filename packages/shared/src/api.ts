@@ -18,6 +18,7 @@ import type {
   CheckoutRequest,
   CheckoutResponse,
   MeResponse,
+  DXFUploadResponse,
   ApiError,
 } from "./types";
 
@@ -128,6 +129,36 @@ export function createApiClient(options: ApiClientOptions = {}) {
     return await response.blob();
   }
 
+  async function requestMultipart<T>(
+    path: string,
+    body: FormData
+  ): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (options.getAuthToken) {
+      const token = await options.getAuthToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    }
+    const response = await fetchFn(`${baseUrl}${path}`, {
+      method: "POST",
+      headers,
+      body,
+    });
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type") || "";
+      let detail: unknown = null;
+      let message = `HTTP ${response.status}`;
+      if (contentType.includes("application/json")) {
+        const err = (await response.json()) as ApiError;
+        detail = err.detail;
+        message = typeof err.detail === "string" ? err.detail : message;
+      } else {
+        message = await response.text();
+      }
+      throw new ApiClientError(message, response.status, detail);
+    }
+    return (await response.json()) as T;
+  }
+
   return {
     baseUrl,
 
@@ -200,6 +231,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
         method: "POST",
         body: JSON.stringify(body),
       }),
+
+    // ── Upload ────────────────────────────────────────────────────────────
+    uploadDxf: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return requestMultipart<DXFUploadResponse>("/api/v1/upload/dxf", form);
+    },
   };
 }
 

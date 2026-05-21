@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "buildCommand": "pnpm turbo run build --filter=web",
+  "outputDirectory": "apps/web/.next/standalone",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "env": {
+    "NODE_ENV": "production",
+    "NEXT_PUBLIC_API_URL": "@next_public_api_url"
+  },
+  "envPrefix": "NEXT_PUBLIC_",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  }
+}

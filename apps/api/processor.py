@@ -59,20 +59,25 @@ class DataProcessor:
         return Polygon(points)
 
     @staticmethod
-    def _add_valid_polygon(polygons, points):
+    def _add_valid_polygon(polygons_with_labels, points, label=""):
         if len(points) < 3:
             return
         poly = Polygon(points)
         if poly.is_valid and poly.area > 0:
-            polygons.append(poly)
+            polygons_with_labels.append((poly, label))
             return
         fixed = poly.buffer(0)
         if fixed.is_valid and fixed.area > 0:
-            polygons.append(fixed)
+            polygons_with_labels.append((fixed, label))
 
     @staticmethod
     def parse_dxf(filepath):
-        """Read closed cuttable geometries from a DXF file."""
+        """Read closed cuttable geometries from a DXF file.
+
+        Returns:
+            List of (Polygon, label) tuples where label is the DXF layer name
+            (empty string when the layer is the default "0" layer).
+        """
         try:
             import ezdxf
         except ImportError:
@@ -80,11 +85,12 @@ class DataProcessor:
 
         doc = ezdxf.readfile(filepath)
         msp = doc.modelspace()
-        polygons = []
+        polygons_with_labels = []
 
         for entity in msp.query("LWPOLYLINE"):
             if not entity.closed:
                 continue
+            layer = entity.dxf.layer if entity.dxf.layer != "0" else ""
             raw_points = list(entity.get_points())
             points = []
             for idx, pt in enumerate(raw_points):
@@ -95,30 +101,49 @@ class DataProcessor:
                     next_pt = raw_points[(idx + 1) % len(raw_points)]
                     next_point = (float(next_pt[0]), float(next_pt[1]))
                     points.extend(DataProcessor._interpolate_arc((x, y), next_point, bulge))
-            DataProcessor._add_valid_polygon(polygons, points)
+            DataProcessor._add_valid_polygon(polygons_with_labels, points, label=layer)
 
         for entity in msp.query("POLYLINE"):
             if entity.is_closed:
+                layer = entity.dxf.layer if entity.dxf.layer != "0" else ""
                 points = [(v.dxf.location.x, v.dxf.location.y) for v in entity.vertices]
-                DataProcessor._add_valid_polygon(polygons, points)
+                DataProcessor._add_valid_polygon(polygons_with_labels, points, label=layer)
 
         for entity in msp.query("CIRCLE"):
             radius = float(entity.dxf.radius)
             if radius > 0:
-                polygons.append(
+                layer = entity.dxf.layer if entity.dxf.layer != "0" else ""
+                polygons_with_labels.append((
                     DataProcessor._circle_to_polygon(
                         entity.dxf.center.x,
                         entity.dxf.center.y,
                         radius,
-                    )
-                )
+                    ),
+                    layer,
+                ))
 
-        if not polygons:
+        if not polygons_with_labels:
             lines = list(msp.query("LINE"))
             points = [(line.dxf.start.x, line.dxf.start.y) for line in lines]
-            DataProcessor._add_valid_polygon(polygons, points)
+            DataProcessor._add_valid_polygon(polygons_with_labels, points, label="")
 
-        return polygons
+        return polygons_with_labels
+
+    @staticmethod
+    def get_dxf_unit(filepath) -> str:
+        """Detect unit from DXF INSUNITS header. Returns 'mm', 'inch', or 'unknown'."""
+        try:
+            import ezdxf
+            doc = ezdxf.readfile(filepath)
+            insunits = doc.header.get("$INSUNITS", 0)
+            if insunits == 4:
+                return "mm"
+            elif insunits == 1:
+                return "inch"
+            else:
+                return "unknown"
+        except Exception:
+            return "unknown"
 
     @staticmethod
     def parse_image(image_path, calibration_mm=100.0):

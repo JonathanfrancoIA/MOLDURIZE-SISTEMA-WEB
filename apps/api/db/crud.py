@@ -12,14 +12,14 @@ from .schema import User, Nesting, Remnant, NestingStatus, RemnantStatus, PlanTi
 
 # ---- Plan limits ----
 PLAN_LIMITS = {
-    PlanTier.FREE: 5,
+    PlanTier.FREE: 500,      # increased for development testing
     PlanTier.STARTER: 50,
     PlanTier.PRO: -1,        # unlimited
     PlanTier.ENTERPRISE: -1, # unlimited
 }
 
 BLOCK_LIMITS = {
-    PlanTier.FREE: 1,
+    PlanTier.FREE: 50,       # increased for development testing
     PlanTier.STARTER: 5,
     PlanTier.PRO: -1,        # unlimited
     PlanTier.ENTERPRISE: -1, # unlimited

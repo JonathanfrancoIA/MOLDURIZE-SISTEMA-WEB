@@ -229,6 +229,30 @@ export interface MeResponse {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// UPLOAD (DXF / IMAGE)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ExtractedPart {
+  min_x: number;
+  min_y: number;
+  max_x: number;
+  max_y: number;
+  width: number;
+  height: number;
+  area: number;
+  description: string;
+  label?: string;  // DXF layer name
+}
+
+export interface DXFUploadResponse {
+  success: boolean;
+  message: string;
+  parts_count: number;
+  parts: ExtractedPart[];
+  unit?: string;  // "mm" | "inch" | "unknown"
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ERROR
 // ═══════════════════════════════════════════════════════════════════════════
 

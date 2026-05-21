@@ -109,6 +109,66 @@ BANDED_GRID_REQUEST = {
 }
 
 
+# Two pieces with different heights in the same column — used to trigger the
+# "diagonal inter-piece cut" bug when the shared-grid detector rejected them.
+DIFFERENT_HEIGHT_REQUEST = {
+    "pieces": [
+        {"x": 0, "y": 0, "width": 600, "height": 300, "block_index": 0},
+        {"x": 0, "y": 303, "width": 600, "height": 600, "block_index": 0},
+    ],
+    "block_width": 4000,
+    "block_height": 1200,
+    "config": {
+        "feed_rate": 800,
+        "clearance": 0,
+        "origin_x": 0,
+        "origin_y": 0,
+        "wire_temp": 80,
+        "lead_in_length": 0,
+        "output_style": "devfoam",
+        "corner_radius": 0.5,
+        "corner_segments": 3,
+    },
+    "machine_profile": "mach3",
+    "strategy": "serpentine",
+}
+
+# Mixed rows: 1 wide piece in row 0, 2 narrower pieces in row 1 (different widths
+# between rows so no shared-grid is possible, tests the axis-aligned fallback).
+MIXED_ROWS_REQUEST = {
+    "pieces": [
+        {"x": 0, "y": 0, "width": 1200, "height": 300, "block_index": 0},
+        {"x": 0, "y": 303, "width": 600, "height": 300, "block_index": 0},
+        {"x": 603, "y": 303, "width": 597, "height": 300, "block_index": 0},
+    ],
+    "block_width": 4000,
+    "block_height": 1200,
+    "config": {
+        "feed_rate": 800,
+        "clearance": 0,
+        "origin_x": 0,
+        "origin_y": 0,
+        "wire_temp": 80,
+        "lead_in_length": 0,
+        "output_style": "devfoam",
+        "corner_radius": 0.5,
+        "corner_segments": 3,
+    },
+    "machine_profile": "mach3",
+    "strategy": "serpentine",
+}
+
+
+def _has_large_diagonal_move(gcode: str, threshold_mm: float = 10.0) -> bool:
+    """Return True if any G1 move has both dx and dy above threshold_mm."""
+    for (x1, y1), (x2, y2) in zip(
+        _g1_coordinates(gcode), _g1_coordinates(gcode)[1:]
+    ):
+        if abs(x2 - x1) > threshold_mm and abs(y2 - y1) > threshold_mm:
+            return True
+    return False
+
+
 def _g1_coordinates(gcode: str):
     coordinates = []
     for line in gcode.splitlines():
@@ -285,3 +345,47 @@ class TestGCodeContent:
         assert default_response.status_code == 200
         assert auto_response.text == banded_response.text
         assert default_response.text == banded_response.text
+
+    def test_no_diagonal_cuts_for_different_height_pieces(self, client):
+        """Same-column pieces with different heights must not produce diagonal cuts.
+
+        Regression for the bug where _detect_shared_grid rejected grids with
+        varying row heights, causing the fallback loop to emit diagonal G1 moves
+        between rows (which destroy the foam material).
+        """
+        response = client.post("/api/v1/gcode", json=DIFFERENT_HEIGHT_REQUEST)
+        assert response.status_code == 200
+        assert not _has_large_diagonal_move(response.text), (
+            "Diagonal inter-piece cut detected for different-height pieces"
+        )
+        assert not _has_consecutive_duplicate_moves(response.text)
+
+    def test_no_diagonal_cuts_for_mixed_row_widths(self, client):
+        """Pieces with different widths per row must not produce diagonal cuts.
+
+        Regression for the fallback loop diagonal bug: when rows have different
+        widths (can't form a shared grid), serpentine ordering used to jump
+        diagonally from the end of one row to the start of the next.
+        """
+        response = client.post("/api/v1/gcode", json=MIXED_ROWS_REQUEST)
+        assert response.status_code == 200
+        assert not _has_large_diagonal_move(response.text), (
+            "Diagonal inter-piece cut detected for mixed row-width pieces"
+        )
+
+    def test_shared_grid_accepts_different_height_rows(self, client):
+        """Shared grid strategy should handle rows with different heights.
+
+        Two pieces stacked vertically with different heights should be cut as
+        a single connected path, not as two independent rectangles.
+        """
+        shared_request = copy.deepcopy(DIFFERENT_HEIGHT_REQUEST)
+        shared_request["strategy"] = "devfoam_shared"
+        response = client.post("/api/v1/gcode", json=shared_request)
+        assert response.status_code == 200
+        # Shared-grid path is shorter than two independent contour loops
+        contour_request = copy.deepcopy(DIFFERENT_HEIGHT_REQUEST)
+        contour_request["strategy"] = "contour"
+        contour_response = client.post("/api/v1/gcode", json=contour_request)
+        assert contour_response.status_code == 200
+        assert _path_distance(response.text) <= _path_distance(contour_response.text)

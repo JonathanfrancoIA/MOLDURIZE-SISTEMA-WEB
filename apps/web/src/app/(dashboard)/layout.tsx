@@ -1,19 +1,5 @@
 import Link from "next/link";
-import {
-  History,
-  LayoutDashboard,
-  PackageOpen,
-  Scissors,
-  Settings,
-} from "lucide-react";
-
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { href: "/nesting", label: "Nesting", Icon: Scissors },
-  { href: "/history", label: "Historico", Icon: History },
-  { href: "/remnants", label: "Retalhos", Icon: PackageOpen },
-  { href: "/settings", label: "Ajustes", Icon: Settings },
-];
+import DashboardNav from "@/components/DashboardNav";
 
 const hasClerkKey =
   !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
@@ -36,10 +22,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#f5f5f0] text-[#171713]">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(201,149,47,0.16),transparent_32%),radial-gradient(circle_at_92%_10%,rgba(23,23,19,0.06),transparent_30%)]" />
+    <div className="min-h-[100dvh] bg-[#f4f3ee] text-[#171713]">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(201,149,47,0.12),transparent_32%),radial-gradient(circle_at_92%_10%,rgba(23,23,19,0.04),transparent_30%)]" />
       <div className="relative min-h-[100dvh]">
-        <header className="sticky top-0 z-20 border-b border-black/10 bg-[#f5f5f0]/88 backdrop-blur-xl">
+        <header className="sticky top-0 z-20 border-b border-black/8 bg-[#f4f3ee]/90 backdrop-blur-xl">
           <div className="mx-auto grid min-h-16 max-w-[1720px] grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:px-6">
             <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-md bg-[#171713] text-sm font-black text-[#f2c767] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
@@ -47,7 +33,7 @@ export default async function DashboardLayout({
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-bold tracking-tight text-[#171713]">MOLDURIZE</div>
-                <div className="text-xs text-[#625f55]">Corte EPS, nesting e G-Code</div>
+                <div className="text-[11px] text-[#817b6d]">Corte EPS, nesting e G-Code</div>
               </div>
             </Link>
 
@@ -55,18 +41,7 @@ export default async function DashboardLayout({
               {UserButtonEl}
             </div>
 
-            <nav className="col-span-2 row-start-2 flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:justify-center lg:pb-0">
-              {navItems.map(({ href, label, Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-black/10 bg-white/80 px-3 text-xs font-semibold text-[#504d43] shadow-[0_12px_28px_-24px_rgba(0,0,0,0.35)] transition-all duration-200 hover:border-[#c9952f]/50 hover:bg-[#fffaf0] hover:text-[#171713] active:scale-[0.98]"
-                >
-                  <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  {label}
-                </Link>
-              ))}
-            </nav>
+            <DashboardNav />
           </div>
         </header>
         <main className="relative mx-auto max-w-[1720px] px-4 py-4 lg:px-6">{children}</main>

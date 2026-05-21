@@ -9,8 +9,6 @@ import {
   Cpu,
   Download,
   FileCode2,
-  Gauge,
-  Layers3,
   Loader2,
   Plus,
   Ruler,
@@ -27,6 +25,7 @@ import {
   type PartInput,
 } from "@moldurize/shared";
 import { NestingCanvas } from "@/components/nesting";
+import { DxfImportModal } from "@/components/DxfImportModal";
 
 type EditablePart = Required<Pick<PartInput, "width" | "height" | "quantity">> & {
   id: string;
@@ -34,6 +33,25 @@ type EditablePart = Required<Pick<PartInput, "width" | "height" | "quantity">> &
 };
 
 type GCodeStrategy = "devfoam_auto" | "devfoam_shared" | "devfoam_banded";
+
+const PART_PALETTE = [
+  { fill: "#c9952f", highlight: "#e0b85c", text: "#1b160b" },
+  { fill: "#b87333", highlight: "#d49157", text: "#1b160b" },
+  { fill: "#7a9a6e", highlight: "#96b388", text: "#1b1e17" },
+  { fill: "#c4956a", highlight: "#d9b08c", text: "#1b160b" },
+  { fill: "#5e8585", highlight: "#7da3a3", text: "#f0ede6" },
+  { fill: "#c4a882", highlight: "#d9c4a6", text: "#1b160b" },
+  { fill: "#8a6b3f", highlight: "#a88a5c", text: "#f0ede6" },
+  { fill: "#a0522d", highlight: "#bf7040", text: "#f0ede6" },
+];
+
+function getPartColor(label: string) {
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) {
+    hash = ((hash << 5) - hash + label.charCodeAt(i)) | 0;
+  }
+  return PART_PALETTE[Math.abs(hash) % PART_PALETTE.length];
+}
 
 const initialParts: EditablePart[] = [
   { id: "p1", label: "Moldura A", width: 600, height: 80, quantity: 12 },
@@ -97,6 +115,7 @@ function NestingContent() {
   const [initialLoad, setInitialLoad] = useState(!!id);
   const [gcodeLoading, setGcodeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDxfModalOpen, setIsDxfModalOpen] = useState(false);
 
   const totalPieces = useMemo(
     () => parts.reduce((sum, part) => sum + Math.max(0, Number(part.quantity) || 0), 0),
@@ -128,6 +147,7 @@ function NestingContent() {
   useEffect(() => {
     if (!id) return;
     setInitialLoad(true);
+    setError(null);
     api.getNesting(id)
       .then((res) => {
         setProjectName(res.name || "Projeto Salvo");
@@ -147,7 +167,13 @@ function NestingContent() {
 
         setResult(res);
       })
-      .catch((err) => setError(formatError(err, "Erro ao carregar projeto.")))
+      .catch((err) => {
+        if (err instanceof ApiClientError && err.status === 404) {
+          setError("Projeto não encontrado.");
+        } else {
+          setError(formatError(err, "Erro ao carregar projeto."));
+        }
+      })
       .finally(() => setInitialLoad(false));
   }, [id, api]);
 
@@ -191,6 +217,19 @@ function NestingContent() {
       quantity: Number(quantity),
       label: label.trim() || undefined,
     }));
+  }
+
+  function handleDxfImport(importedParts: Array<{ label: string; width: number; height: number; quantity: number }>) {
+    setParts(current => [
+      ...current,
+      ...importedParts.map((p, i) => ({
+        id: `dxf_${Date.now()}_${i}`,
+        label: p.label,
+        width: p.width,
+        height: p.height,
+        quantity: p.quantity,
+      })),
+    ]);
   }
 
   async function runNesting() {
@@ -285,29 +324,68 @@ function NestingContent() {
 
   const efficiency = result ? 100 - result.waste_percent : 0;
 
+  // Aspect-ratio proporcional ao bloco (limitado entre 1.2 e 3.0 para nao exagerar)
+  const rawRatio = blockWidth / blockHeight;
+  const clampedRatio = Math.min(Math.max(rawRatio, 1.2), 3.0);
+  const efficiencyColor = !result
+    ? "text-[#625f55]"
+    : efficiency >= 85
+      ? "text-[#2d7a3a]"
+      : efficiency >= 60
+        ? "text-[#a68b1a]"
+        : "text-[#c9522f]";
+
+  // Piece count per block for tabs
+  const piecesPerBlock = useMemo(() => {
+    if (!result) return new Map<number, number>();
+    const counts = new Map<number, number>();
+    for (const part of result.placed_parts) {
+      counts.set(part.block_index, (counts.get(part.block_index) || 0) + 1);
+    }
+    return counts;
+  }, [result]);
+
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-lg border border-black/10 bg-white/85 shadow-[0_24px_70px_-52px_rgba(23,23,19,0.45),inset_0_1px_0_rgba(255,255,255,0.9)]">
+      <section className="overflow-hidden rounded-lg border border-black/8 bg-white/90 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
         <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-7 items-center gap-2 rounded-md border border-[#c9952f]/30 bg-[#fff5da] px-2.5 text-xs font-bold text-[#8b651f]">
-                <Scissors className="h-3.5 w-3.5" strokeWidth={1.8} />
-                hot-wire workbench
+              <span className="inline-flex h-6 items-center gap-1.5 rounded border border-[#c9952f]/25 bg-[#fff8e6] px-2 text-[10px] font-bold uppercase tracking-wider text-[#8b651f]">
+                <Scissors className="h-3 w-3" strokeWidth={2} />
+                hot-wire
               </span>
-              <span className="text-xs font-medium text-[#817b6d]">devFoam-style G-Code</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#171713] md:text-3xl">Nesting EPS</h1>
-            <p className="mt-1 max-w-[64ch] text-sm leading-6 text-[#625f55]">
-              Configure o lote, visualize o bloco em escala e gere saida X/Y/Z/A para fio quente.
+            <h1 className="text-xl font-bold tracking-tight text-[#171713] md:text-2xl">Nesting EPS</h1>
+            <p className="mt-0.5 max-w-[56ch] text-[13px] leading-5 text-[#817b6d]">
+              Configure o lote, visualize o bloco em escala e gere G-Code 4 eixos.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[600px]">
-            <Metric label="Pecas" value={totalPieces.toString()} icon={<Layers3 className="h-4 w-4" />} />
-            <Metric label="Blocos" value={result ? result.total_blocks.toString() : "-"} icon={<Box className="h-4 w-4" />} />
-            <Metric label="Efic." value={result ? `${efficiency.toFixed(1)}%` : "-"} icon={<Gauge className="h-4 w-4" />} tone="accent" />
-            <Metric label="G-Code" value={gcodeLineCount ? `${gcodeLineCount} linhas` : "-"} icon={<FileCode2 className="h-4 w-4" />} />
+          <div className="flex items-end gap-6 lg:gap-8">
+            {/* Hero KPI: Efficiency */}
+            <div className="text-right">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#928b7c]">Eficiencia</div>
+              <div className={`font-mono text-3xl font-extrabold tracking-tight ${efficiencyColor}`}>
+                {result ? `${efficiency.toFixed(1)}%` : "--"}
+              </div>
+            </div>
+
+            {/* Secondary metrics inline */}
+            <div className="flex gap-4 border-l border-black/8 pl-6 text-right">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#928b7c]">Pecas</div>
+                <div className="font-mono text-sm font-bold text-[#171713]">{totalPieces}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#928b7c]">Blocos</div>
+                <div className="font-mono text-sm font-bold text-[#171713]">{result ? result.total_blocks : "--"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#928b7c]">G-Code</div>
+                <div className="font-mono text-sm font-bold text-[#171713]">{gcodeLineCount || "--"}</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -315,18 +393,51 @@ function NestingContent() {
       {error && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
           {error}
+          {error === "Projeto não encontrado." && (
+            <> {" "}
+              <a href="/nesting" className="underline font-semibold hover:text-red-600">
+                Criar novo projeto
+              </a>
+            </>
+          )}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="space-y-4 xl:sticky xl:top-24 xl:max-h-[calc(100dvh-7rem)] xl:self-start xl:overflow-y-auto xl:pr-2">
           <Panel title="Materia-prima" icon={<Box className="h-4 w-4" strokeWidth={1.8} />}>
-            <div className="space-y-3">
-              <TextInput label="Projeto" value={projectName} onChange={setProjectName} />
+            <div className="space-y-4">
+              <TextInput label="Nome do Projeto" value={projectName} onChange={setProjectName} placeholder="Ex: Lote de molduras" />
               <div className="grid grid-cols-3 gap-2">
                 <NumberInput label="Largura" value={blockWidth} onChange={setBlockWidth} suffix="mm" />
                 <NumberInput label="Altura" value={blockHeight} onChange={setBlockHeight} suffix="mm" />
                 <NumberInput label="Kerf" value={kerf} onChange={setKerf} suffix="mm" step={0.1} />
+              </div>
+
+              <div className="border-t border-black/10 pt-4">
+                <h3 className="text-xs font-bold text-[#625f55] mb-3 uppercase tracking-wider">Importar referências</h3>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDxfModalOpen(true)}
+                    className="w-full inline-flex h-10 items-center justify-center gap-2 rounded-md border-2 border-dashed border-black/20 bg-[#f7f4ec] px-4 text-xs font-semibold text-[#625f55] transition-all duration-200 hover:border-[#c9952f]/60 hover:text-[#171713] hover:bg-[#fffcf5] active:scale-[0.98]"
+                    title="Selecione um arquivo DXF para importar peças automaticamente"
+                  >
+                    <FileCode2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    Importar DXF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setError("Importação de imagem estará disponível em breve.")}
+                    className="w-full inline-flex h-10 items-center justify-center gap-2 rounded-md border-2 border-dashed border-black/20 bg-[#f7f4ec] px-4 text-xs font-semibold text-[#625f55] transition-all duration-200 hover:border-[#c9952f]/60 hover:text-[#171713] hover:bg-[#fffcf5] active:scale-[0.98]"
+                    title="Carregue uma imagem como referência de layout"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Importar Imagem
+                  </button>
+                </div>
               </div>
             </div>
           </Panel>
@@ -346,9 +457,17 @@ function NestingContent() {
             }
           >
             <div className="max-h-[392px] space-y-3 overflow-auto pr-1">
-              {parts.map((part) => (
+              {parts.map((part) => {
+                const color = getPartColor(part.label);
+                return (
                 <div key={part.id} className="rounded-md border border-black/10 bg-[#fbfaf6] p-3">
                   <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-10 w-12 shrink-0 items-center justify-center rounded-md border border-black/10 bg-[#efe7d1] p-1.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]">
+                      <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(part.width, 1)} ${Math.max(part.height, 1)}`} preserveAspectRatio="xMidYMid meet">
+                        <rect width={part.width} height={part.height} fill={color.fill} stroke="#1b160b" strokeWidth={Math.max(part.width, part.height) * 0.02} />
+                        <rect width={part.width} height={Math.max(part.height * 0.15, 1)} fill={color.highlight} opacity="0.6" />
+                      </svg>
+                    </div>
                     <input
                       value={part.label}
                       onChange={(event) => updatePart(part.id, "label", event.target.value)}
@@ -370,7 +489,8 @@ function NestingContent() {
                     <NumberInput compact label="Qtd" value={part.quantity} onChange={(value) => updatePart(part.id, "quantity", value)} />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <button
@@ -394,69 +514,90 @@ function NestingContent() {
                   {result ? `${visibleParts.length} pecas no bloco ${activeBlock + 1}` : "Calcule para visualizar o encaixe"}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {blockIndexes.map((block) => (
-                  <button
-                    key={block}
-                    type="button"
-                    onClick={() => setActiveBlock(block)}
-                    className={`h-8 rounded-md border px-3 text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
-                      activeBlock === block
-                        ? "border-[#f2c767] bg-[#f2c767] text-[#171713]"
-                        : "border-white/12 bg-white/[0.04] text-white/62 hover:border-white/28 hover:text-white"
-                    }`}
-                  >
-                    B{block + 1}
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-1.5">
+                {blockIndexes.map((block) => {
+                  const count = piecesPerBlock.get(block) || 0;
+                  return (
+                    <button
+                      key={block}
+                      type="button"
+                      onClick={() => setActiveBlock(block)}
+                      className={`h-7 rounded-md border px-2.5 font-mono text-[11px] font-semibold transition-all duration-200 active:scale-[0.97] ${
+                        activeBlock === block
+                          ? "border-[#f2c767] bg-[#f2c767] text-[#171713]"
+                          : "border-white/10 bg-white/[0.04] text-white/55 hover:border-white/25 hover:text-white"
+                      }`}
+                    >
+                      B{block + 1}{count > 0 ? ` (${count})` : ""}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="relative h-[540px] lg:h-[620px]">
-              {(loading || initialLoad) && <CanvasLoading />}
-              <NestingCanvas
-                blockWidth={blockWidth}
-                blockHeight={blockHeight}
-                placedParts={result?.placed_parts ?? []}
-                activeBlockIndex={activeBlock}
-              />
+            <div
+              className="relative w-full"
+              style={{ paddingBottom: `${(1 / clampedRatio) * 100}%`, minHeight: 320, maxHeight: 680 }}
+            >
+              <div className="absolute inset-0">
+                {(loading || initialLoad) && <CanvasLoading />}
+                <NestingCanvas
+                  blockWidth={blockWidth}
+                  blockHeight={blockHeight}
+                  placedParts={result?.placed_parts ?? []}
+                  activeBlockIndex={activeBlock}
+                />
+              </div>
             </div>
           </main>
 
           <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
             <Panel title="Maquina 4 eixos" icon={<Settings2 className="h-4 w-4" strokeWidth={1.8} />}>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-[#625f55]">Perfil CNC</span>
-                <select
-                  value={machineProfile}
-                  onChange={(event) => setMachineProfile(event.target.value as MachineProfile)}
-                  className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#171713] outline-none transition-colors focus:border-[#c9952f]/70"
-                >
-                  <option value="mach3">Mach3</option>
-                  <option value="planet_cnc">PlanetCNC</option>
-                  <option value="grbl">GRBL</option>
-                </select>
-              </label>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <NumberInput label="Feed" value={feedRate} onChange={setFeedRate} suffix="mm/min" />
-                <NumberInput label="Clearance" value={clearance} onChange={setClearance} suffix="mm" step={0.5} />
-                <NumberInput label="Gap bloco" value={blockGap} onChange={setBlockGap} suffix="mm" />
-                <NumberInput label="Fio" value={wireTemp} onChange={setWireTemp} suffix="%" />
-                <NumberInput label="Lead-in" value={leadIn} onChange={setLeadIn} suffix="mm" step={0.5} />
-                <NumberInput label="Raio canto" value={cornerRadius} onChange={setCornerRadius} suffix="mm" step={0.1} />
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold text-[#625f55]">Perfil CNC</span>
+                  <select
+                    value={machineProfile}
+                    onChange={(event) => setMachineProfile(event.target.value as MachineProfile)}
+                    className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#171713] outline-none transition-colors focus:border-[#c9952f]/70"
+                  >
+                    <option value="mach3">Mach3</option>
+                    <option value="planet_cnc">PlanetCNC</option>
+                    <option value="grbl">GRBL</option>
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberInput label="Feed" value={feedRate} onChange={setFeedRate} suffix="mm/min" />
+                  <NumberInput label="Fio" value={wireTemp} onChange={setWireTemp} suffix="%" />
+                </div>
+                
+                <details className="group rounded-md border border-black/10 bg-white overflow-hidden">
+                  <summary className="flex cursor-pointer items-center justify-between bg-[#fbfaf6] px-3 py-2 text-xs font-bold text-[#625f55] hover:bg-[#f7f4ec] select-none">
+                    <span>AVANCADO</span>
+                    <svg className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </summary>
+                  <div className="p-3 border-t border-black/10">
+                    <div className="grid grid-cols-2 gap-2">
+                      <NumberInput label="Clearance" value={clearance} onChange={setClearance} suffix="mm" step={0.5} />
+                      <NumberInput label="Gap bloco" value={blockGap} onChange={setBlockGap} suffix="mm" />
+                      <NumberInput label="Lead-in" value={leadIn} onChange={setLeadIn} suffix="mm" step={0.5} />
+                      <NumberInput label="Raio canto" value={cornerRadius} onChange={setCornerRadius} suffix="mm" step={0.1} />
+                    </div>
+                    <label className="mt-3 block">
+                      <span className="mb-1.5 block text-xs font-semibold text-[#625f55]">Sequencia G-Code</span>
+                      <select
+                        value={gcodeStrategy}
+                        onChange={(event) => setGcodeStrategy(event.target.value as GCodeStrategy)}
+                        className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#171713] outline-none transition-colors focus:border-[#c9952f]/70"
+                      >
+                        <option value="devfoam_auto">devFoam automatico</option>
+                        <option value="devfoam_shared">devFoam compartilhado</option>
+                        <option value="devfoam_banded">devFoam faixas</option>
+                      </select>
+                    </label>
+                  </div>
+                </details>
               </div>
-              <label className="mt-3 block">
-                <span className="mb-1.5 block text-xs font-semibold text-[#625f55]">Sequencia</span>
-                <select
-                  value={gcodeStrategy}
-                  onChange={(event) => setGcodeStrategy(event.target.value as GCodeStrategy)}
-                  className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#171713] outline-none transition-colors focus:border-[#c9952f]/70"
-                >
-                  <option value="devfoam_auto">devFoam automatico</option>
-                  <option value="devfoam_shared">devFoam compartilhado</option>
-                  <option value="devfoam_banded">devFoam faixas</option>
-                </select>
-              </label>
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3">
                 <StatusItem label="Formato" value="devFoam" />
                 <StatusItem label="Eixos" value={machineProfile === "grbl" ? "X/Y" : "X/Y/Z/A"} />
@@ -494,6 +635,13 @@ function NestingContent() {
           </div>
         </section>
       </div>
+
+      <DxfImportModal
+        isOpen={isDxfModalOpen}
+        onClose={() => setIsDxfModalOpen(false)}
+        onImport={handleDxfImport}
+        api={api}
+      />
     </div>
   );
 }
@@ -529,38 +677,18 @@ function Panel({
   );
 }
 
-function Metric({
-  label,
-  value,
-  icon,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  icon: ReactNode;
-  tone?: "default" | "accent";
-}) {
-  return (
-    <div className="rounded-lg border border-black/10 bg-[#fbfaf6] px-3 py-2.5 shadow-[0_14px_28px_-24px_rgba(0,0,0,0.35)]">
-      <div className="mb-1.5 flex items-center justify-between gap-2 text-[#928b7c]">
-        <div className="text-[10px] font-bold uppercase tracking-[0.14em]">{label}</div>
-        <span className={tone === "accent" ? "text-[#c9952f]" : "text-[#aaa493]"}>{icon}</span>
-      </div>
-      <div className={`font-mono text-base font-bold ${tone === "accent" ? "text-[#8b651f]" : "text-[#171713]"}`}>
-        {value}
-      </div>
-    </div>
-  );
-}
+// Metric component removed -- replaced by inline KPI layout in header
 
 function TextInput({
   label,
   value,
   onChange,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -568,7 +696,8 @@ function TextInput({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#171713] outline-none transition-colors focus:border-[#c9952f]/70"
+        placeholder={placeholder}
+        className="h-10 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#171713] outline-none transition-colors placeholder:text-[#aaa493] focus:border-[#c9952f]/70"
       />
     </label>
   );
